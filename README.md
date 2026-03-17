@@ -44,3 +44,36 @@ chmod +x /data/VenusOS-SolarEdge-Heartbeat/setup
 chmod +x /data/VenusOS-SolarEdge-Heartbeat/service/run
 /data/VenusOS-SolarEdge-Heartbeat/setup install
 ```
+
+## Run script manually from your Terminal (Mac OS) - it runs only once!!!
+```bash
+pip3 install "pymodbus>=3.8.6“ && python3 -c "
+import time
+from pymodbus.client.tcp import ModbusTcpClient
+from pymodbus.client.mixin import ModbusClientMixin
+
+ip = '192.168.1.221'
+c = ModbusTcpClient(ip, port=502)
+
+if c.connect():
+    resp = c.read_holding_registers(61762, count=2, slave=126)
+    if not resp.isError():
+        val = c.convert_from_registers(resp.registers, ModbusClientMixin.DATATYPE.UINT32, word_order='little')
+        if val == 0:
+            print('⚙️ Enabling Grid Control...')
+            c.write_registers(61762, c.convert_to_registers(1, ModbusClientMixin.DATATYPE.UINT32, word_order='little'), slave=126)
+            c.write_registers(61696, c.convert_to_registers(1, ModbusClientMixin.DATATYPE.UINT16, word_order='little'), slave=126)
+            print('⏳ Waiting 60s to commit changes to the inverter...')
+            time.sleep(60)
+        else:
+            print('✅ Grid Control already enabled.')
+            
+    print('⚙️ Setting Limits...')
+    c.write_registers(62224, c.convert_to_registers(60, ModbusClientMixin.DATATYPE.UINT32, word_order='little'), slave=126)
+    c.write_registers(62226, c.convert_to_registers(0.0, ModbusClientMixin.DATATYPE.FLOAT32, word_order='little'), slave=126)
+    c.close()
+    print('🎉 Timeout set to 60s and Fallback Power set to 0.0%')
+else:
+    print('❌ Connection failed')
+"
+```
