@@ -6,9 +6,11 @@ source "/data/SetupHelper/HelperResources/IncludeHelpers"
 
 packageAction() {
     case $1 in
-        INSTALL)
+        install)
             logMessage "Installing pymodbus 3.8.6..."
-            pip3 install "pymodbus==3.8.6"
+            
+            # Victron OS sometimes needs python3-pip explicitly called
+            python3 -m pip install "pymodbus==3.8.6"
 
             logMessage "Installing SolarEdge Heartbeat Service..."
             setupClientService "solaredge_heartbeat" "$setupFolder/service/run"
@@ -20,7 +22,7 @@ packageAction() {
             sed -i '/description: qsTr("Display & language")/a \ \ \ \ \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } }' /opt/victronenergy/gui/qml/PageSettings.qml
             ;;
             
-        UNINSTALL)
+        uninstall)
             logMessage "Uninstalling SolarEdge Heartbeat..."
             removeClientService "solaredge_heartbeat"
             
@@ -30,13 +32,5 @@ packageAction() {
             ;;
     esac
 }
-
-# --- This is the execution block I missed! ---
-if [ $scriptAction == 'NONE' ] ; then
-    standardActionPrompt
-else
-    packageAction $scriptAction
-fi
-# ---------------------------------------------
 
 endScript
