@@ -5,7 +5,7 @@ source "/data/SetupHelper/HelperResources/IncludeHelpers"
 
 packageAction() {
     case $1 in
-        install)
+        install|INSTALL)
             logMessage "Installing SolarEdge Heartbeat Service..."
             installService $packageName
 
@@ -18,7 +18,7 @@ packageAction() {
             restartGui=true
             ;;
             
-        uninstall)
+        uninstall|UNINSTALL)
             logMessage "Uninstalling SolarEdge Heartbeat..."
             removeService $packageName
             
