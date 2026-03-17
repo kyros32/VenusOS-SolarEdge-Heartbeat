@@ -1,14 +1,12 @@
 #!/bin/bash
 packageLogFile="/var/log/SolarEdgeHeartbeat/current"
-
-# Tell SetupHelper to automatically restart the GUI when finished
 restartGui=true
 
 source "/data/SetupHelper/HelperResources/IncludeHelpers"
 
 packageAction() {
     case $1 in
-        install)
+        INSTALL)
             logMessage "Installing pymodbus 3.8.6..."
             pip3 install "pymodbus==3.8.6"
 
@@ -22,7 +20,7 @@ packageAction() {
             sed -i '/description: qsTr("Display & language")/a \ \ \ \ \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } }' /opt/victronenergy/gui/qml/PageSettings.qml
             ;;
             
-        uninstall)
+        UNINSTALL)
             logMessage "Uninstalling SolarEdge Heartbeat..."
             removeClientService "solaredge_heartbeat"
             
@@ -32,4 +30,13 @@ packageAction() {
             ;;
     esac
 }
+
+# --- This is the execution block I missed! ---
+if [ $scriptAction == 'NONE' ] ; then
+    standardActionPrompt
+else
+    packageAction $scriptAction
+fi
+# ---------------------------------------------
+
 endScript
