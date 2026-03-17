@@ -9,15 +9,21 @@ MbPage {
     property string settingsBind: "com.victronenergy.settings"
     property string dbusBind: "com.victronenergy.solaredge"
 
+    VBusItem { id: statusItem; bind: Utils.path(dbusBind, "/Status") }
+    VBusItem { id: activeDevicesItem; bind: Utils.path(dbusBind, "/ActiveDevices") }
+    VBusItem { id: gridControlItem; bind: Utils.path(dbusBind, "/GridControlEnabled") }
+    VBusItem { id: actualTimeoutItem; bind: Utils.path(dbusBind, "/ActualTimeout") }
+    VBusItem { id: actualFallbackItem; bind: Utils.path(dbusBind, "/ActualFallbackPower") }
+
     model: VisibleItemModel {
         MbSwitch {
             name: qsTr("Enable Background Heartbeat")
             bind: Utils.path(settingsBind, "/Settings/SolarEdge/EnableService")
         }
         
-        MbItemText {
+        MbOK {
             description: qsTr("System Status")
-            item.bind: Utils.path(dbusBind, "/Status")
+            value: statusItem.valid ? statusItem.value : "--"
         }
 
         MbSwitch {
@@ -30,50 +36,40 @@ MbPage {
             item.bind: Utils.path(settingsBind, "/Settings/SolarEdge/IpAddresses")
         }
 
-        MbItemSpinBox {
+        MbEditBox {
             description: qsTr("Modbus Slave ID")
-            bind: Utils.path(settingsBind, "/Settings/SolarEdge/SlaveId")
-            stepSize: 1
-            min: 1
-            max: 255
+            item.bind: Utils.path(settingsBind, "/Settings/SolarEdge/SlaveId")
         }
 
-        MbItemText {
+        MbOK {
             description: qsTr("Active Devices")
-            item.bind: Utils.path(dbusBind, "/ActiveDevices")
-            wrapMode: Text.WordWrap
+            value: activeDevicesItem.valid ? activeDevicesItem.value : "--"
         }
 
-        MbItemText {
+        MbOK {
             description: qsTr("Grid Control Enabled")
-            item.bind: Utils.path(dbusBind, "/GridControlEnabled")
+            value: gridControlItem.valid ? gridControlItem.value : "--"
         }
 
-        MbItemText {
+        MbOK {
             description: qsTr("Current Timeout (s)")
-            item.bind: Utils.path(dbusBind, "/ActualTimeout")
+            value: actualTimeoutItem.valid ? actualTimeoutItem.value : "--"
         }
 
-        MbItemText {
+        MbOK {
             description: qsTr("Current Fallback Power (%)")
-            item.bind: Utils.path(dbusBind, "/ActualFallbackPower")
+            value: actualFallbackItem.valid ? actualFallbackItem.value : "--"
         }
 
         // --- User Inputs ---
-        MbItemSpinBox {
+        MbEditBox {
             description: qsTr("Set Target Timeout (s)")
-            bind: Utils.path(settingsBind, "/Settings/SolarEdge/TargetTimeout")
-            stepSize: 1
-            min: 0
-            max: 3600
+            item.bind: Utils.path(settingsBind, "/Settings/SolarEdge/TargetTimeout")
         }
 
-        MbItemSpinBox {
+        MbEditBox {
             description: qsTr("Set Target Fallback Power (%)")
-            bind: Utils.path(settingsBind, "/Settings/SolarEdge/TargetFallback")
-            stepSize: 1
-            min: 0
-            max: 100
+            item.bind: Utils.path(settingsBind, "/Settings/SolarEdge/TargetFallback")
         }
     }
 }
