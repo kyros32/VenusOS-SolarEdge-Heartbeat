@@ -1,40 +1,41 @@
 #!/bin/bash
 packageLogFile="/var/log/SolarEdgeHeartbeat/current"
 
+# Source the SetupHelper resources
 source "/data/SetupHelper/HelperResources/IncludeHelpers"
 
 packageAction() {
     case $1 in
-        install|INSTALL)
+        INSTALL)
             logMessage "Installing SolarEdge Heartbeat Service..."
             installService $packageName
 
             logMessage "Patching QML UI..."
             cp "$scriptDir/qml/PageSolarEdge.qml" "$qmlDir/"
             
-            # Clean up any broken previous injections just in case
+            # Clean up any existing SolarEdge Heartbeat entries to prevent duplicates
             sed -i '/SolarEdge Heartbeat/d' "$qmlDir/PageSettings.qml"
             
-            # Bulletproof injection: Insert directly after the model declaration
-            sed -i '/model: Vis.*ItemModel/a \ \ \ \ \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } }' "$qmlDir/PageSettings.qml"
+            # Use model: VisibleItemModel as a bulletproof anchor for injection
+            sed -i '/model: VisibleItemModel {/a \ \ \ \ \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } }' "$qmlDir/PageSettings.qml"
             
             restartGui=true
             ;;
             
-        uninstall|UNINSTALL)
+        UNINSTALL)
             logMessage "Uninstalling SolarEdge Heartbeat..."
             removeService $packageName
             
-            # Remove QML file and clean up PageSettings
-            rm -f "$qmlDir/PageSolarEdge.qml"
+            # Clean up PageSettings.qml
             sed -i '/SolarEdge Heartbeat/d' "$qmlDir/PageSettings.qml"
+            rm -f "$qmlDir/PageSolarEdge.qml"
             
             restartGui=true
             ;;
     esac
 }
 
-# --- SetupHelper Execution Block ---
+# The execution block for SetupHelper
 if [ $scriptAction == 'NONE' ] ; then
     standardActionPrompt
 else
