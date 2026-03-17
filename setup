@@ -14,7 +14,7 @@ packageAction() {
             cp "$scriptDir/qml/PageSolarEdge.qml" "$qmlDir/"
             
             # Inject menu item into Settings page safely
-            sed -i '/description: qsTr("Display & language")/a \ \ \ \ \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } }' "$qmlDir/PageSettings.qml"
+            sed -i '/PageSettingsDisplay {} }/a \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } }' "$qmlDir/PageSettings.qml"
             
             restartGui=true
             ;;
