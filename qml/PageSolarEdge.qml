@@ -9,7 +9,7 @@ MbPage {
     property string settingsBind: "com.victronenergy.settings"
     property string dbusBind: "com.victronenergy.solaredge"
 
-    model: VisualItemModel {
+    model: VisibleItemModel {
         MbSwitch {
             name: qsTr("Enable Background Heartbeat")
             bind: Utils.path(settingsBind, "/Settings/SolarEdge/EnableService")
@@ -25,11 +25,9 @@ MbPage {
             bind: Utils.path(settingsBind, "/Settings/SolarEdge/AutoDiscover")
         }
         
-        // Editable box supporting multiple comma-separated IP addresses
         MbEditBox {
             description: qsTr("Inverter IPs (comma separated)")
             item.bind: Utils.path(settingsBind, "/Settings/SolarEdge/IpAddresses")
-            matchString: "[0-9., ]*"
         }
 
         MbItemSpinBox {
@@ -40,7 +38,6 @@ MbPage {
             max: 255
         }
 
-        // Live readout showing who is OK, ERR, or OFF
         MbItemText {
             description: qsTr("Active Devices")
             item.bind: Utils.path(dbusBind, "/ActiveDevices")
@@ -53,34 +50,30 @@ MbPage {
         }
 
         MbItemText {
-            description: qsTr("Current Timeout")
+            description: qsTr("Current Timeout (s)")
             item.bind: Utils.path(dbusBind, "/ActualTimeout")
-            item.text: item.valid ? item.value + " s" : "--"
         }
 
         MbItemText {
-            description: qsTr("Current Fallback Power")
+            description: qsTr("Current Fallback Power (%)")
             item.bind: Utils.path(dbusBind, "/ActualFallbackPower")
-            item.text: item.valid ? item.value.toFixed(1) + " %" : "--"
         }
 
         // --- User Inputs ---
         MbItemSpinBox {
-            description: qsTr("Set Target Timeout")
+            description: qsTr("Set Target Timeout (s)")
             bind: Utils.path(settingsBind, "/Settings/SolarEdge/TargetTimeout")
             stepSize: 1
             min: 0
             max: 3600
-            unit: "s"
         }
 
         MbItemSpinBox {
-            description: qsTr("Set Target Fallback Power")
+            description: qsTr("Set Target Fallback Power (%)")
             bind: Utils.path(settingsBind, "/Settings/SolarEdge/TargetFallback")
             stepSize: 1
             min: 0
             max: 100
-            unit: "%"
         }
     }
 }
