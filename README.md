@@ -38,11 +38,13 @@ You must have [SetupHelper installed](https://github.com/kwindrem/SetupHelper) o
 
 *Alternatively, install via SSH:*
 ```bash
+rm -rf /data/VenusOS-SolarEdge-Heartbeat
+rm -rf /data/setupOptions/VenusOS-SolarEdge-Heartbeat
 mkdir -p /data/VenusOS-SolarEdge-Heartbeat
-wget -O - [https://github.com/YOUR_GITHUB_USERNAME/VenusOS-SolarEdge-Heartbeat/archive/refs/heads/main.tar.gz](https://github.com/YOUR_GITHUB_USERNAME/VenusOS-SolarEdge-Heartbeat/archive/refs/heads/main.tar.gz) | tar -xzf - -C /data/VenusOS-SolarEdge-Heartbeat --strip-components=1
+wget -O - https://github.com/kyros32/VenusOS-SolarEdge-Heartbeat/archive/refs/heads/main.tar.gz | tar -xzf - -C /data/VenusOS-SolarEdge-Heartbeat --strip-components=1
 chmod +x /data/VenusOS-SolarEdge-Heartbeat/setup
 chmod +x /data/VenusOS-SolarEdge-Heartbeat/service/run
-/data/VenusOS-SolarEdge-Heartbeat/setup install
+bash -x /data/VenusOS-SolarEdge-Heartbeat/setup install
 ```
 
 ## Run script manually from your Terminal (Mac OS) - it runs only once!!!
