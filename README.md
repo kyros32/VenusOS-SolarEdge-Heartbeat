@@ -8,6 +8,7 @@ A background service (watchdog) for Victron Venus OS that periodically connects 
 * Survives Venus OS firmware updates using SetupHelper.
 
 ## Repository structure:
+```
 VenusOS-SolarEdge-Heartbeat/
 ├── README.md
 ├── setup
@@ -17,6 +18,7 @@ VenusOS-SolarEdge-Heartbeat/
 │   └── run
 └── qml/
     └── PageSolarEdge.qml
+```
 
 ## Installation 
 This driver is packaged to be used with [SetupHelper](https://github.com/kwindrem/SetupHelper), the standard Venus OS package manager.
