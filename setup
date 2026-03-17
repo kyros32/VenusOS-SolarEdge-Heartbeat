@@ -1,0 +1,31 @@
+#!/bin/bash
+packageLogFile="/var/log/SolarEdgeHeartbeat/current"
+source "/data/SetupHelper/HelperResources/IncludeHelpers"
+
+packageAction() {
+    case $1 in
+        install)
+            logMessage "Installing pymodbus 3.8.6..."
+            pip3 install "pymodbus==3.8.6"
+
+            logMessage "Installing SolarEdge Heartbeat Service..."
+            setupClientService "solaredge_heartbeat" "$setupFolder/service/run"
+
+            logMessage "Patching QML UI..."
+            cp "$setupFolder/qml/PageSolarEdge.qml" /opt/victronenergy/gui/qml/
+            
+            # Inject menu item into Settings page
+            sed -i '/description: qsTr("Display & language")/a \ \ \ \ \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } }' /opt/victronenergy/gui/qml/PageSettings.qml
+            ;;
+            
+        uninstall)
+            logMessage "Uninstalling SolarEdge Heartbeat..."
+            removeClientService "solaredge_heartbeat"
+            
+            # Remove QML file and clean up PageSettings
+            rm -f /opt/victronenergy/gui/qml/PageSolarEdge.qml
+            sed -i '/description: qsTr("SolarEdge Heartbeat")/d' /opt/victronenergy/gui/qml/PageSettings.qml
+            ;;
+    esac
+}
+endScript
