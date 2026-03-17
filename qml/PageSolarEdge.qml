@@ -16,28 +16,50 @@ MbPage {
         }
         
         MbItemText {
-            description: qsTr("Connection Status")
+            description: qsTr("System Status")
             item.bind: Utils.path(dbusBind, "/Status")
         }
+
+        MbSwitch {
+            name: qsTr("Scan Network for Inverters")
+            bind: Utils.path(settingsBind, "/Settings/SolarEdge/AutoDiscover")
+        }
         
+        // Editable box supporting multiple comma-separated IP addresses
+        MbEditBox {
+            description: qsTr("Inverter IPs (comma separated)")
+            item.bind: Utils.path(settingsBind, "/Settings/SolarEdge/IpAddresses")
+            matchString: "[0-9., ]*"
+        }
+
+        MbItemSpinBox {
+            description: qsTr("Modbus Slave ID")
+            bind: Utils.path(settingsBind, "/Settings/SolarEdge/SlaveId")
+            stepSize: 1
+            min: 1
+            max: 255
+        }
+
+        // Live readout showing who is OK, ERR, or OFF
         MbItemText {
-            description: qsTr("Inverter IP Address")
-            item.bind: Utils.path(settingsBind, "/Settings/SolarEdge/IpAddress")
+            description: qsTr("Active Devices")
+            item.bind: Utils.path(dbusBind, "/ActiveDevices")
+            wrapMode: Text.WordWrap
         }
 
         MbItemText {
-            description: qsTr("Grid Control Enabled (Actual)")
+            description: qsTr("Grid Control Enabled")
             item.bind: Utils.path(dbusBind, "/GridControlEnabled")
         }
 
         MbItemText {
-            description: qsTr("Current Timeout (Actual)")
+            description: qsTr("Current Timeout")
             item.bind: Utils.path(dbusBind, "/ActualTimeout")
             item.text: item.valid ? item.value + " s" : "--"
         }
 
         MbItemText {
-            description: qsTr("Current Fallback Power (Actual)")
+            description: qsTr("Current Fallback Power")
             item.bind: Utils.path(dbusBind, "/ActualFallbackPower")
             item.text: item.valid ? item.value.toFixed(1) + " %" : "--"
         }
