@@ -1,36 +1,42 @@
 #!/bin/bash
 packageLogFile="/var/log/SolarEdgeHeartbeat/current"
-restartGui=true
 
 source "/data/SetupHelper/HelperResources/IncludeHelpers"
 
 packageAction() {
     case $1 in
-        install)
-            logMessage "Installing pymodbus 3.8.6..."
-            
-            # Victron OS sometimes needs python3-pip explicitly called
-            python3 -m pip install "pymodbus==3.8.6"
-
+        INSTALL)
             logMessage "Installing SolarEdge Heartbeat Service..."
-            setupClientService "solaredge_heartbeat" "$setupFolder/service/run"
+            # SetupHelper natively looks for the "service" folder and installs it
+            installService $packageName
 
             logMessage "Patching QML UI..."
-            cp "$setupFolder/qml/PageSolarEdge.qml" /opt/victronenergy/gui/qml/
+            cp "$scriptDir/qml/PageSolarEdge.qml" "$qmlDir/"
             
-            # Inject menu item into Settings page
-            sed -i '/description: qsTr("Display & language")/a \ \ \ \ \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } }' /opt/victronenergy/gui/qml/PageSettings.qml
+            # Inject menu item into Settings page safely
+            sed -i '/description: qsTr("Display & language")/a \ \ \ \ \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } }' "$qmlDir/PageSettings.qml"
+            
+            restartGui=true
             ;;
             
-        uninstall)
+        UNINSTALL)
             logMessage "Uninstalling SolarEdge Heartbeat..."
-            removeClientService "solaredge_heartbeat"
+            removeService $packageName
             
             # Remove QML file and clean up PageSettings
-            rm -f /opt/victronenergy/gui/qml/PageSolarEdge.qml
-            sed -i '/description: qsTr("SolarEdge Heartbeat")/d' /opt/victronenergy/gui/qml/PageSettings.qml
+            rm -f "$qmlDir/PageSolarEdge.qml"
+            sed -i '/description: qsTr("SolarEdge Heartbeat")/d' "$qmlDir/PageSettings.qml"
+            
+            restartGui=true
             ;;
     esac
 }
+
+# --- SetupHelper Execution Block ---
+if [ $scriptAction == 'NONE' ] ; then
+    standardActionPrompt
+else
+    packageAction $scriptAction
+fi
 
 endScript
