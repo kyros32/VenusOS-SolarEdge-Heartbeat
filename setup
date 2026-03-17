@@ -1,5 +1,9 @@
 #!/bin/bash
 packageLogFile="/var/log/SolarEdgeHeartbeat/current"
+
+# Tell SetupHelper to automatically restart the GUI when finished
+restartGui=true
+
 source "/data/SetupHelper/HelperResources/IncludeHelpers"
 
 packageAction() {
