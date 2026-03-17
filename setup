@@ -12,6 +12,9 @@ packageAction() {
             logMessage "Patching QML UI..."
             cp "$scriptDir/qml/PageSolarEdge.qml" "$qmlDir/"
             
+            # Clean up any broken previous injections just in case
+            sed -i '/SolarEdge Heartbeat/d' "$qmlDir/PageSettings.qml"
+            
             # Bulletproof injection: Insert directly after the model declaration
             sed -i '/model: Vis.*ItemModel/a \ \ \ \ \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } }' "$qmlDir/PageSettings.qml"
             
@@ -24,7 +27,7 @@ packageAction() {
             
             # Remove QML file and clean up PageSettings
             rm -f "$qmlDir/PageSolarEdge.qml"
-            sed -i '/description: qsTr("SolarEdge Heartbeat")/d' "$qmlDir/PageSettings.qml"
+            sed -i '/SolarEdge Heartbeat/d' "$qmlDir/PageSettings.qml"
             
             restartGui=true
             ;;
