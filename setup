@@ -11,12 +11,13 @@ packageAction() {
             installService $packageName
 
             logMessage "Patching QML UI..."
+            # Copy our custom page to the system directory
             cp "$scriptDir/qml/PageSolarEdge.qml" "$qmlDir/"
             
-            # Clean up any existing SolarEdge Heartbeat entries to prevent duplicates
+            # Remove any previous failed attempts
             sed -i '/SolarEdge Heartbeat/d' "$qmlDir/PageSettings.qml"
             
-            # Use model: VisibleItemModel as a bulletproof anchor for injection
+            # Inject the menu item at a known-good anchor point
             sed -i '/model: VisibleItemModel {/a \ \ \ \ \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } }' "$qmlDir/PageSettings.qml"
             
             restartGui=true
@@ -26,7 +27,7 @@ packageAction() {
             logMessage "Uninstalling SolarEdge Heartbeat..."
             removeService $packageName
             
-            # Clean up PageSettings.qml
+            # Clean up PageSettings and remove the page
             sed -i '/SolarEdge Heartbeat/d' "$qmlDir/PageSettings.qml"
             rm -f "$qmlDir/PageSolarEdge.qml"
             
@@ -35,7 +36,7 @@ packageAction() {
     esac
 }
 
-# The execution block for SetupHelper
+# Standard SetupHelper execution block
 if [ $scriptAction == 'NONE' ] ; then
     standardActionPrompt
 else
