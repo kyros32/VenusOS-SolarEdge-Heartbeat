@@ -6,35 +6,38 @@ MbPage {
     id: root
     title: qsTr("SolarEdge Heartbeat")
 
-    // Define the data sources clearly
+    // Define bindings using VBusItem for maximum stability
     property string settingsBind: "com.victronenergy.settings"
     property string serviceBind: "com.victronenergy.solaredge"
 
+    VBusItem { id: statusItem; bind: Utils.path(serviceBind, "/Status") }
+    VBusItem { id: activeDevices; bind: Utils.path(serviceBind, "/ActiveDevices") }
+    VBusItem { id: gridControl; bind: Utils.path(serviceBind, "/GridControlEnabled") }
+    VBusItem { id: timeout; bind: Utils.path(serviceBind, "/ActualTimeout") }
+    VBusItem { id: fallback; bind: Utils.path(serviceBind, "/ActualFallbackPower") }
+
     model: VisibleItemModel {
-        // 1. GLOBAL ENABLE
         MbSwitch {
             name: qsTr("Enable Heartbeat Service")
             bind: Utils.path(settingsBind, "/Settings/SolarEdge/EnableService")
         }
 
-        // 2. STATUS SECTION
         MbItemText {
-            description: qsTr("Connection Status")
-            item.bind: Utils.path(serviceBind, "/Status")
+            description: qsTr("System Status")
+            text: statusItem.valid ? statusItem.value : "--"
         }
 
         MbItemText {
             description: qsTr("Active Devices")
-            item.bind: Utils.path(serviceBind, "/ActiveDevices")
+            text: activeDevices.valid ? activeDevices.value : "--"
+            wrapMode: Text.WordWrap
         }
 
-        // 3. AUTO-DISCOVERY
         MbSwitch {
             name: qsTr("Scan Network for Inverters")
             bind: Utils.path(settingsBind, "/Settings/SolarEdge/AutoDiscover")
         }
 
-        // 4. CONFIGURATION (INPUTS)
         MbEditBox {
             description: qsTr("Inverter IPs (comma separated)")
             item.bind: Utils.path(settingsBind, "/Settings/SolarEdge/IpAddresses")
@@ -45,33 +48,31 @@ MbPage {
             item.bind: Utils.path(settingsBind, "/Settings/SolarEdge/SlaveId")
         }
 
-        // 5. LIVE INVERTER DATA
         MbItemValue {
-            description: qsTr("Grid Control Enabled (Live)")
-            item.bind: Utils.path(serviceBind, "/GridControlEnabled")
+            description: qsTr("Grid Control Enabled")
+            item: gridControl
         }
 
         MbItemValue {
-            description: qsTr("Current Timeout (Live)")
-            item.bind: Utils.path(serviceBind, "/ActualTimeout")
+            description: qsTr("Current Timeout")
+            item: timeout
             unit: "s"
         }
 
         MbItemValue {
-            description: qsTr("Current Fallback Power (Live)")
-            item.bind: Utils.path(serviceBind, "/ActualFallbackPower")
+            description: qsTr("Current Fallback Power")
+            item: fallback
             unit: "%"
         }
 
-        // 6. TARGET SETTINGS
         MbItemValue {
-            description: qsTr("Target Timeout")
+            description: qsTr("Set Target Timeout")
             item.bind: Utils.path(settingsBind, "/Settings/SolarEdge/TargetTimeout")
             unit: "s"
         }
 
         MbItemValue {
-            description: qsTr("Target Fallback Power")
+            description: qsTr("Set Target Fallback Power")
             item.bind: Utils.path(settingsBind, "/Settings/SolarEdge/TargetFallback")
             unit: "%"
         }
