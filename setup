@@ -5,21 +5,20 @@ source "/data/SetupHelper/HelperResources/IncludeHelpers"
 
 packageAction() {
     case $1 in
-        INSTALL)
+        install)
             logMessage "Installing SolarEdge Heartbeat Service..."
-            # SetupHelper natively looks for the "service" folder and installs it
             installService $packageName
 
             logMessage "Patching QML UI..."
             cp "$scriptDir/qml/PageSolarEdge.qml" "$qmlDir/"
             
-            # Inject menu item into Settings page safely
-            sed -i '/PageSettingsDisplay {} }/a \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } }' "$qmlDir/PageSettings.qml"
+            # Bulletproof injection: Insert directly at the top of the settings list
+            sed -i '/id: settingsModel/a \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } }' "$qmlDir/PageSettings.qml"
             
             restartGui=true
             ;;
             
-        UNINSTALL)
+        uninstall)
             logMessage "Uninstalling SolarEdge Heartbeat..."
             removeService $packageName
             
