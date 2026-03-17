@@ -12,8 +12,8 @@ packageAction() {
             logMessage "Patching QML UI..."
             cp "$scriptDir/qml/PageSolarEdge.qml" "$qmlDir/"
             
-            # Bulletproof injection: Insert directly at the top of the settings list
-            sed -i '/id: settingsModel/a \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } }' "$qmlDir/PageSettings.qml"
+            # Bulletproof injection: Insert directly after the model declaration
+            sed -i '/model: Vis.*ItemModel/a \ \ \ \ \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } }' "$qmlDir/PageSettings.qml"
             
             restartGui=true
             ;;
