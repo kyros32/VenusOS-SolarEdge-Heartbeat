@@ -13,11 +13,11 @@ packageAction() {
             logMessage "Patching QML UI..."
             cp "$scriptDir/qml/PageSolarEdge.qml" "$qmlDir/"
             
-            # Remove any previous failed attempts using our unique tag
-            sed -i '/#SolarEdgeHeartbeat/d' "$qmlDir/PageSettings.qml"
+            # Remove any previous failed attempts using our unique tag (support older formats)
+            sed -i '/SolarEdgeHeartbeat/d' "$qmlDir/PageSettings.qml"
             
-            # Inject our menu item and hide a unique tag (#SolarEdgeHeartbeat) at the end of the line
-            sed -i '/model: VisibleItemModel {/a \ \ \ \ \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } } #SolarEdgeHeartbeat' "$qmlDir/PageSettings.qml"
+            # Inject our menu item with a valid QML comment at the end
+            sed -i '/model: VisibleItemModel {/a \ \ \ \ \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } } \/\/SolarEdgeHeartbeat' "$qmlDir/PageSettings.qml"
             
             restartGui=true
             ;;
@@ -26,12 +26,12 @@ packageAction() {
             logMessage "Uninstalling SolarEdge Heartbeat..."
             removeService $packageName
             
-            # ONLY remove the line that contains our unique tag
-            sed -i '/#SolarEdgeHeartbeat/d' "$qmlDir/PageSettings.qml"
+            # Remove our injected menu line(s)
+            sed -i '/SolarEdgeHeartbeat/d' "$qmlDir/PageSettings.qml"
             rm -f "$qmlDir/PageSolarEdge.qml"
-            
-            # Note: Do NOT delete /data/$packageName or /data/setupOptions. 
-            # Package Manager handles deleting the package via the "Remove" button in the GUI.
+
+            # Remove persisted package data
+            rm -rf "/data/$packageName" "/data/setupOptions/$packageName"
 
             # We can, however, safely delete our own custom log folder
             rm -rf "$(dirname "$packageLogFile")"
