@@ -66,7 +66,7 @@ MbPage {
 
         MbItemText {
             description: qsTr("Slot 1")
-            text: slot1Serial.valid && slot1Serial.value !== "" ? (slot1Serial.value + " " + slot1Ip.value + " (id " + slot1Slave.value + ")") : "--"
+            text: slot1Serial.valid && slot1Serial.value != "" ? (slot1Serial.value + " " + slot1Ip.value + " (id " + slot1Slave.value + ")") : "--"
             wrapMode: Text.WordWrap
         }
         MbSwitch {
@@ -76,7 +76,7 @@ MbPage {
 
         MbItemText {
             description: qsTr("Slot 2")
-            text: slot2Serial.valid && slot2Serial.value !== "" ? (slot2Serial.value + " " + slot2Ip.value + " (id " + slot2Slave.value + ")") : "--"
+            text: slot2Serial.valid && slot2Serial.value != "" ? (slot2Serial.value + " " + slot2Ip.value + " (id " + slot2Slave.value + ")") : "--"
             wrapMode: Text.WordWrap
         }
         MbSwitch {
@@ -86,7 +86,7 @@ MbPage {
 
         MbItemText {
             description: qsTr("Slot 3")
-            text: slot3Serial.valid && slot3Serial.value !== "" ? (slot3Serial.value + " " + slot3Ip.value + " (id " + slot3Slave.value + ")") : "--"
+            text: slot3Serial.valid && slot3Serial.value != "" ? (slot3Serial.value + " " + slot3Ip.value + " (id " + slot3Slave.value + ")") : "--"
             wrapMode: Text.WordWrap
         }
         MbSwitch {
@@ -96,7 +96,7 @@ MbPage {
 
         MbItemText {
             description: qsTr("Slot 4")
-            text: slot4Serial.valid && slot4Serial.value !== "" ? (slot4Serial.value + " " + slot4Ip.value + " (id " + slot4Slave.value + ")") : "--"
+            text: slot4Serial.valid && slot4Serial.value != "" ? (slot4Serial.value + " " + slot4Ip.value + " (id " + slot4Slave.value + ")") : "--"
             wrapMode: Text.WordWrap
         }
         MbSwitch {
@@ -106,7 +106,7 @@ MbPage {
 
         MbItemText {
             description: qsTr("Slot 5")
-            text: slot5Serial.valid && slot5Serial.value !== "" ? (slot5Serial.value + " " + slot5Ip.value + " (id " + slot5Slave.value + ")") : "--"
+            text: slot5Serial.valid && slot5Serial.value != "" ? (slot5Serial.value + " " + slot5Ip.value + " (id " + slot5Slave.value + ")") : "--"
             wrapMode: Text.WordWrap
         }
         MbSwitch {
