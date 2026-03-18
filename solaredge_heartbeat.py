@@ -195,7 +195,40 @@ class SolarEdgeHeartbeat:
         try:
             obj = bus.get_object(service_name, item_path)
             props = dbus.Interface(obj, 'org.freedesktop.DBus.Properties')
-            return props.Get('com.victronenergy.BusItem', 'Value')
+
+            # First try the common interface name (most Venus builds)
+            for prop_name in ['Value', 'value', 'uiValue', 'uiValueString']:
+                try:
+                    v = props.Get('com.victronenergy.BusItem', prop_name)
+                    if v is not None:
+                        return v
+                except Exception:
+                    pass
+
+            # Next: introspect and try *every* interface on this object.
+            # This avoids hard-coding interface names that vary between Venus images.
+            iface_names = []
+            try:
+                intro_iface = dbus.Interface(obj, 'org.freedesktop.DBus.Introspectable')
+                xml = intro_iface.Introspect()
+                iface_names = list(set(re.findall(r'<interface name="([^"]+)"', xml)))
+            except Exception:
+                iface_names = []
+
+            if not iface_names:
+                # Final fallback
+                iface_names = ['com.victronenergy.BusItem']
+
+            for iface in iface_names:
+                for prop_name in ['Value', 'value']:
+                    try:
+                        v = props.Get(iface, prop_name)
+                        if v is not None:
+                            return v
+                    except Exception:
+                        pass
+
+            return None
         except Exception:
             return None
 
