@@ -6,8 +6,6 @@ MbPage {
     title: qsTr("SolarEdge Heartbeat")
 
     // Define bindings using VBusItem for maximum stability
-    property string settingsBind: "com.victronenergy.settings"
-
     VBusItem { id: statusItem; bind: "com.victronenergy.solaredge_heartbeat/Status" }
     VBusItem { id: activeDevices; bind: "com.victronenergy.solaredge_heartbeat/ActiveDevices" }
     VBusItem { id: gridControl; bind: "com.victronenergy.solaredge_heartbeat/GridControlEnabled" }
@@ -39,7 +37,7 @@ MbPage {
     model: VisibleItemModel {
         MbSwitch {
             name: qsTr("Enable Heartbeat Service")
-            bind: settingsBind + "/Settings/SolarEdge/EnableService"
+            bind: "com.victronenergy.settings/Settings/SolarEdge/EnableService"
         }
 
         MbItemValue {
@@ -54,7 +52,7 @@ MbPage {
 
         MbSwitch {
             name: qsTr("Auto-detect SolarEdge inverters from DBus")
-            bind: settingsBind + "/Settings/SolarEdge/AutoDetectDbus"
+            bind: "com.victronenergy.settings/Settings/SolarEdge/AutoDetectDbus"
         }
 
         MbItemValue {
@@ -67,7 +65,7 @@ MbPage {
         MbItemValue { description: qsTr("Slot 1 ID"); item: slot1Slave }
         MbSwitch {
             name: qsTr("Fallback on Slot 1")
-            bind: settingsBind + "/Settings/SolarEdge/FallbackSlot1Enabled"
+            bind: "com.victronenergy.settings/Settings/SolarEdge/FallbackSlot1Enabled"
         }
 
         MbItemValue { description: qsTr("Slot 2 Serial"); item: slot2Serial }
@@ -75,7 +73,7 @@ MbPage {
         MbItemValue { description: qsTr("Slot 2 ID"); item: slot2Slave }
         MbSwitch {
             name: qsTr("Fallback on Slot 2")
-            bind: settingsBind + "/Settings/SolarEdge/FallbackSlot2Enabled"
+            bind: "com.victronenergy.settings/Settings/SolarEdge/FallbackSlot2Enabled"
         }
 
         MbItemValue { description: qsTr("Slot 3 Serial"); item: slot3Serial }
@@ -83,7 +81,7 @@ MbPage {
         MbItemValue { description: qsTr("Slot 3 ID"); item: slot3Slave }
         MbSwitch {
             name: qsTr("Fallback on Slot 3")
-            bind: settingsBind + "/Settings/SolarEdge/FallbackSlot3Enabled"
+            bind: "com.victronenergy.settings/Settings/SolarEdge/FallbackSlot3Enabled"
         }
 
         MbItemValue { description: qsTr("Slot 4 Serial"); item: slot4Serial }
@@ -91,7 +89,7 @@ MbPage {
         MbItemValue { description: qsTr("Slot 4 ID"); item: slot4Slave }
         MbSwitch {
             name: qsTr("Fallback on Slot 4")
-            bind: settingsBind + "/Settings/SolarEdge/FallbackSlot4Enabled"
+            bind: "com.victronenergy.settings/Settings/SolarEdge/FallbackSlot4Enabled"
         }
 
         MbItemValue { description: qsTr("Slot 5 Serial"); item: slot5Serial }
@@ -99,22 +97,22 @@ MbPage {
         MbItemValue { description: qsTr("Slot 5 ID"); item: slot5Slave }
         MbSwitch {
             name: qsTr("Fallback on Slot 5")
-            bind: settingsBind + "/Settings/SolarEdge/FallbackSlot5Enabled"
+            bind: "com.victronenergy.settings/Settings/SolarEdge/FallbackSlot5Enabled"
         }
 
         MbSwitch {
             name: qsTr("Scan Network for Inverters")
-            bind: settingsBind + "/Settings/SolarEdge/AutoDiscover"
+            bind: "com.victronenergy.settings/Settings/SolarEdge/AutoDiscover"
         }
 
         MbEditBox {
             description: qsTr("Inverter IPs (comma separated)")
-            item.bind: settingsBind + "/Settings/SolarEdge/IpAddresses"
+            item.bind: "com.victronenergy.settings/Settings/SolarEdge/IpAddresses"
         }
 
         MbItemValue {
             description: qsTr("Modbus Slave ID")
-            item.bind: settingsBind + "/Settings/SolarEdge/SlaveId"
+            item.bind: "com.victronenergy.settings/Settings/SolarEdge/SlaveId"
         }
 
         MbItemValue {
@@ -134,12 +132,12 @@ MbPage {
 
         MbItemValue {
             description: qsTr("Set Target Timeout")
-            item.bind: settingsBind + "/Settings/SolarEdge/TargetTimeout"
+            item.bind: "com.victronenergy.settings/Settings/SolarEdge/TargetTimeout"
         }
 
         MbItemValue {
             description: qsTr("Set Target Fallback Power")
-            item.bind: settingsBind + "/Settings/SolarEdge/TargetFallbackPower"
+            item.bind: "com.victronenergy.settings/Settings/SolarEdge/TargetFallbackPower"
         }
     }
 }
