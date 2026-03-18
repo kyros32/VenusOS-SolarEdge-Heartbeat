@@ -4,8 +4,16 @@ import threading
 import socket
 import time
 import re
-from pymodbus.client.tcp import ModbusTcpClient
-from pymodbus.client.mixin import ModbusClientMixin
+try:
+    from pymodbus.client.tcp import ModbusTcpClient
+    from pymodbus.client.mixin import ModbusClientMixin
+    HAVE_PYMODBUS = True
+except Exception as e:
+    # If pymodbus is missing, we still want to export settings to keep the UI usable.
+    ModbusTcpClient = None
+    ModbusClientMixin = None
+    HAVE_PYMODBUS = False
+    _PYMODBUS_IMPORT_ERROR = str(e)
 
 sys.path.insert(1, os.path.join(os.path.dirname(__file__), '/opt/victronenergy/dbus-systemcalc-py/ext/velib_python'))
 from vedbus import VeDbusService
@@ -76,6 +84,10 @@ class SolarEdgeHeartbeat:
 
         GLib.timeout_add(10000, self.update)
 
+        if not HAVE_PYMODBUS:
+            self.dbus['/Status'] = 'Missing dependency: pymodbus'
+            logging.error('pymodbus import failed: %s', _PYMODBUS_IMPORT_ERROR)
+
     def handle_changed_setting(self, setting, oldvalue, newvalue):
         if setting == 'AutoDiscover' and newvalue == 1:
             threading.Thread(target=self.scan_network).start()
@@ -85,6 +97,10 @@ class SolarEdgeHeartbeat:
             threading.Thread(target=self.discover_solar_edge_from_dbus).start()
 
     def scan_network(self):
+        if not HAVE_PYMODBUS:
+            GLib.idle_add(self.update_status, 'Missing dependency: pymodbus')
+            return
+
         GLib.idle_add(self.update_status, 'Scanning network (0-255)...')
         found_ips = []
         found_slave = 126
@@ -254,6 +270,11 @@ class SolarEdgeHeartbeat:
     def update(self):
         if self.settings['EnableService'] == 0:
             self.dbus['/Status'] = 'Service Disabled'
+            self.dbus['/ActiveDevices'] = 'None'
+            return True
+
+        if not HAVE_PYMODBUS:
+            self.dbus['/Status'] = 'Missing dependency: pymodbus'
             self.dbus['/ActiveDevices'] = 'None'
             return True
 
