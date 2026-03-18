@@ -125,25 +125,21 @@ MbPage {
         MbItemValue {
             description: qsTr("Current Timeout")
             item: timeout
-            unit: "s"
         }
 
         MbItemValue {
             description: qsTr("Current Fallback Power")
             item: fallback
-            unit: "%"
         }
 
         MbItemValue {
             description: qsTr("Set Target Timeout")
             item.bind: settingsBind + "/Settings/SolarEdge/TargetTimeout"
-            unit: "s"
         }
 
         MbItemValue {
             description: qsTr("Set Target Fallback Power")
             item.bind: settingsBind + "/Settings/SolarEdge/TargetFallbackPower"
-            unit: "%"
         }
     }
 }
