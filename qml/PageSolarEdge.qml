@@ -42,15 +42,14 @@ MbPage {
             bind: settingsBind + "/Settings/SolarEdge/EnableService"
         }
 
-        MbItemText {
+        MbItemValue {
             description: qsTr("System Status")
-            text: statusItem.valid ? statusItem.value : "--"
+            item: statusItem
         }
 
-        MbItemText {
+        MbItemValue {
             description: qsTr("Active Devices")
-            text: activeDevices.valid ? activeDevices.value : "--"
-            wrapMode: Text.WordWrap
+            item: activeDevices
         }
 
         MbSwitch {
@@ -58,46 +57,46 @@ MbPage {
             bind: settingsBind + "/Settings/SolarEdge/AutoDetectDbus"
         }
 
-        MbItemText {
+        MbItemValue {
             description: qsTr("Detected SolarEdge Inverters")
-            text: detectedCount.valid ? detectedCount.value : "--"
+            item: detectedCount
         }
 
-        MbItemText { description: qsTr("Slot 1 Serial"); text: slot1Serial.valid ? slot1Serial.value : "--" }
-        MbItemText { description: qsTr("Slot 1 IP"); text: slot1Ip.valid ? slot1Ip.value : "--" }
-        MbItemText { description: qsTr("Slot 1 ID"); text: slot1Slave.valid ? slot1Slave.value : "--" }
+        MbItemValue { description: qsTr("Slot 1 Serial"); item: slot1Serial }
+        MbItemValue { description: qsTr("Slot 1 IP"); item: slot1Ip }
+        MbItemValue { description: qsTr("Slot 1 ID"); item: slot1Slave }
         MbSwitch {
             name: qsTr("Fallback on Slot 1")
             bind: settingsBind + "/Settings/SolarEdge/FallbackSlot1Enabled"
         }
 
-        MbItemText { description: qsTr("Slot 2 Serial"); text: slot2Serial.valid ? slot2Serial.value : "--" }
-        MbItemText { description: qsTr("Slot 2 IP"); text: slot2Ip.valid ? slot2Ip.value : "--" }
-        MbItemText { description: qsTr("Slot 2 ID"); text: slot2Slave.valid ? slot2Slave.value : "--" }
+        MbItemValue { description: qsTr("Slot 2 Serial"); item: slot2Serial }
+        MbItemValue { description: qsTr("Slot 2 IP"); item: slot2Ip }
+        MbItemValue { description: qsTr("Slot 2 ID"); item: slot2Slave }
         MbSwitch {
             name: qsTr("Fallback on Slot 2")
             bind: settingsBind + "/Settings/SolarEdge/FallbackSlot2Enabled"
         }
 
-        MbItemText { description: qsTr("Slot 3 Serial"); text: slot3Serial.valid ? slot3Serial.value : "--" }
-        MbItemText { description: qsTr("Slot 3 IP"); text: slot3Ip.valid ? slot3Ip.value : "--" }
-        MbItemText { description: qsTr("Slot 3 ID"); text: slot3Slave.valid ? slot3Slave.value : "--" }
+        MbItemValue { description: qsTr("Slot 3 Serial"); item: slot3Serial }
+        MbItemValue { description: qsTr("Slot 3 IP"); item: slot3Ip }
+        MbItemValue { description: qsTr("Slot 3 ID"); item: slot3Slave }
         MbSwitch {
             name: qsTr("Fallback on Slot 3")
             bind: settingsBind + "/Settings/SolarEdge/FallbackSlot3Enabled"
         }
 
-        MbItemText { description: qsTr("Slot 4 Serial"); text: slot4Serial.valid ? slot4Serial.value : "--" }
-        MbItemText { description: qsTr("Slot 4 IP"); text: slot4Ip.valid ? slot4Ip.value : "--" }
-        MbItemText { description: qsTr("Slot 4 ID"); text: slot4Slave.valid ? slot4Slave.value : "--" }
+        MbItemValue { description: qsTr("Slot 4 Serial"); item: slot4Serial }
+        MbItemValue { description: qsTr("Slot 4 IP"); item: slot4Ip }
+        MbItemValue { description: qsTr("Slot 4 ID"); item: slot4Slave }
         MbSwitch {
             name: qsTr("Fallback on Slot 4")
             bind: settingsBind + "/Settings/SolarEdge/FallbackSlot4Enabled"
         }
 
-        MbItemText { description: qsTr("Slot 5 Serial"); text: slot5Serial.valid ? slot5Serial.value : "--" }
-        MbItemText { description: qsTr("Slot 5 IP"); text: slot5Ip.valid ? slot5Ip.value : "--" }
-        MbItemText { description: qsTr("Slot 5 ID"); text: slot5Slave.valid ? slot5Slave.value : "--" }
+        MbItemValue { description: qsTr("Slot 5 Serial"); item: slot5Serial }
+        MbItemValue { description: qsTr("Slot 5 IP"); item: slot5Ip }
+        MbItemValue { description: qsTr("Slot 5 ID"); item: slot5Slave }
         MbSwitch {
             name: qsTr("Fallback on Slot 5")
             bind: settingsBind + "/Settings/SolarEdge/FallbackSlot5Enabled"
