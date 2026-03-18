@@ -5,7 +5,14 @@ import socket
 import time
 import re
 try:
-    from pymodbus.client.tcp import ModbusTcpClient
+    # pymodbus import paths differ between versions.
+    # Venus images commonly ship with pymodbus 2.x.
+    try:
+        # pymodbus>=2.5 typically exposes ModbusTcpClient here
+        from pymodbus.client import ModbusTcpClient
+    except Exception:
+        # fallback for older layouts
+        from pymodbus.client.tcp import ModbusTcpClient
     HAVE_PYMODBUS = True
 except Exception as e:
     # If pymodbus is missing, we still want to export settings to keep the UI usable.
