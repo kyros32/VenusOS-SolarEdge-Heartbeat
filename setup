@@ -6,33 +6,34 @@ source "/data/SetupHelper/HelperResources/IncludeHelpers"
 
 packageAction() {
     case $1 in
-        INSTALL)
+        install|INSTALL)
             logMessage "Installing SolarEdge Heartbeat Service..."
             installService $packageName
 
             logMessage "Patching QML UI..."
             cp "$scriptDir/qml/PageSolarEdge.qml" "$qmlDir/"
             
-            # Remove any previous failed attempts to prevent corruption
-            sed -i '/SolarEdge Heartbeat/d' "$qmlDir/PageSettings.qml"
+            # Remove any previous failed attempts using our unique tag
+            sed -i '/#SolarEdgeHeartbeat/d' "$qmlDir/PageSettings.qml"
             
-            # Standard injection point used by SetupHelper
-            sed -i '/model: VisibleItemModel {/a \ \ \ \ \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } }' "$qmlDir/PageSettings.qml"
+            # Inject our menu item and hide a unique tag (#SolarEdgeHeartbeat) at the end of the line
+            sed -i '/model: VisibleItemModel {/a \ \ \ \ \ \ \ \ MbSubMenu { description: qsTr("SolarEdge Heartbeat"); subpage: Component { PageSolarEdge {} } } #SolarEdgeHeartbeat' "$qmlDir/PageSettings.qml"
             
             restartGui=true
             ;;
             
-        UNINSTALL)
+        uninstall|UNINSTALL)
             logMessage "Uninstalling SolarEdge Heartbeat..."
             removeService $packageName
-            sed -i '/SolarEdge Heartbeat/d' "$qmlDir/PageSettings.qml"
+            
+            # ONLY remove the line that contains our unique tag
+            sed -i '/#SolarEdgeHeartbeat/d' "$qmlDir/PageSettings.qml"
             rm -f "$qmlDir/PageSolarEdge.qml"
+            
+            # Note: Do NOT delete /data/$packageName or /data/setupOptions. 
+            # Package Manager handles deleting the package via the "Remove" button in the GUI.
 
-            # Remove any persisted package data (SetupHelper uses these locations)
-            rm -rf "/data/$packageName"
-            rm -rf "/data/setupOptions/$packageName"
-
-            # Remove our own log files (if we created them)
+            # We can, however, safely delete our own custom log folder
             rm -rf "$(dirname "$packageLogFile")"
             
             restartGui=true
