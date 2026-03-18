@@ -195,9 +195,21 @@ class SolarEdgeHeartbeat:
         try:
             obj = bus.get_object(service_name, item_path)
             props = dbus.Interface(obj, 'org.freedesktop.DBus.Properties')
+            candidate_prop_names = [
+                # Common numeric/text properties
+                'Value',
+                'value',
+                'uiValue',
+                'uiValueString',
+                # Some Venus builds expose strings under text properties
+                'text',
+                'Text',
+                'uiText',
+                'uiTextString',
+            ]
 
             # First try the common interface name (most Venus builds)
-            for prop_name in ['Value', 'value', 'uiValue', 'uiValueString']:
+            for prop_name in candidate_prop_names:
                 try:
                     v = props.Get('com.victronenergy.BusItem', prop_name)
                     if v is not None:
@@ -220,7 +232,7 @@ class SolarEdgeHeartbeat:
                 iface_names = ['com.victronenergy.BusItem']
 
             for iface in iface_names:
-                for prop_name in ['Value', 'value']:
+                for prop_name in candidate_prop_names:
                     try:
                         v = props.Get(iface, prop_name)
                         if v is not None:
@@ -237,6 +249,8 @@ class SolarEdgeHeartbeat:
         if dbus is None:
             GLib.idle_add(self.update_status, 'DBus module not available')
             return
+
+        GLib.idle_add(self.update_status, 'DBus autodetect: scanning SolarEdge pvinverter services...')
 
         try:
             bus = dbus.SystemBus()
@@ -292,6 +306,7 @@ class SolarEdgeHeartbeat:
 
         detected.sort(key=lambda d: d.get('serial', ''))
         GLib.idle_add(self.apply_detected_inverters, detected)
+        GLib.idle_add(self.update_status, f'DBus autodetect: found {len(detected)} SolarEdge devices')
 
     def apply_detected_inverters(self, detected):
         # Keep discovered slots stable by sorting by serial.
