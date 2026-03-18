@@ -7,35 +7,34 @@ MbPage {
 
     // Define bindings using VBusItem for maximum stability
     property string settingsBind: "com.victronenergy.settings"
-    property string serviceBind: "com.victronenergy.solaredge_heartbeat"
 
-    VBusItem { id: statusItem; bind: serviceBind + "/Status" }
-    VBusItem { id: activeDevices; bind: serviceBind + "/ActiveDevices" }
-    VBusItem { id: gridControl; bind: serviceBind + "/GridControlEnabled" }
-    VBusItem { id: timeout; bind: serviceBind + "/ActualTimeout" }
-    VBusItem { id: fallback; bind: serviceBind + "/ActualFallbackPower" }
-    VBusItem { id: detectedCount; bind: serviceBind + "/DetectedInverterCount" }
+    VBusItem { id: statusItem; bind: "com.victronenergy.solaredge_heartbeat/Status" }
+    VBusItem { id: activeDevices; bind: "com.victronenergy.solaredge_heartbeat/ActiveDevices" }
+    VBusItem { id: gridControl; bind: "com.victronenergy.solaredge_heartbeat/GridControlEnabled" }
+    VBusItem { id: timeout; bind: "com.victronenergy.solaredge_heartbeat/ActualTimeout" }
+    VBusItem { id: fallback; bind: "com.victronenergy.solaredge_heartbeat/ActualFallbackPower" }
+    VBusItem { id: detectedCount; bind: "com.victronenergy.solaredge_heartbeat/DetectedInverterCount" }
 
     // Fixed slots (1..5) - Discovery populates detected info, user enables which slot(s) to apply fallback to.
-    VBusItem { id: slot1Serial; bind: serviceBind + "/DetectedInverter1/Serial" }
-    VBusItem { id: slot1Ip; bind: serviceBind + "/DetectedInverter1/Ip" }
-    VBusItem { id: slot1Slave; bind: serviceBind + "/DetectedInverter1/SlaveId" }
+    VBusItem { id: slot1Serial; bind: "com.victronenergy.solaredge_heartbeat/DetectedInverter1/Serial" }
+    VBusItem { id: slot1Ip; bind: "com.victronenergy.solaredge_heartbeat/DetectedInverter1/Ip" }
+    VBusItem { id: slot1Slave; bind: "com.victronenergy.solaredge_heartbeat/DetectedInverter1/SlaveId" }
 
-    VBusItem { id: slot2Serial; bind: serviceBind + "/DetectedInverter2/Serial" }
-    VBusItem { id: slot2Ip; bind: serviceBind + "/DetectedInverter2/Ip" }
-    VBusItem { id: slot2Slave; bind: serviceBind + "/DetectedInverter2/SlaveId" }
+    VBusItem { id: slot2Serial; bind: "com.victronenergy.solaredge_heartbeat/DetectedInverter2/Serial" }
+    VBusItem { id: slot2Ip; bind: "com.victronenergy.solaredge_heartbeat/DetectedInverter2/Ip" }
+    VBusItem { id: slot2Slave; bind: "com.victronenergy.solaredge_heartbeat/DetectedInverter2/SlaveId" }
 
-    VBusItem { id: slot3Serial; bind: serviceBind + "/DetectedInverter3/Serial" }
-    VBusItem { id: slot3Ip; bind: serviceBind + "/DetectedInverter3/Ip" }
-    VBusItem { id: slot3Slave; bind: serviceBind + "/DetectedInverter3/SlaveId" }
+    VBusItem { id: slot3Serial; bind: "com.victronenergy.solaredge_heartbeat/DetectedInverter3/Serial" }
+    VBusItem { id: slot3Ip; bind: "com.victronenergy.solaredge_heartbeat/DetectedInverter3/Ip" }
+    VBusItem { id: slot3Slave; bind: "com.victronenergy.solaredge_heartbeat/DetectedInverter3/SlaveId" }
 
-    VBusItem { id: slot4Serial; bind: serviceBind + "/DetectedInverter4/Serial" }
-    VBusItem { id: slot4Ip; bind: serviceBind + "/DetectedInverter4/Ip" }
-    VBusItem { id: slot4Slave; bind: serviceBind + "/DetectedInverter4/SlaveId" }
+    VBusItem { id: slot4Serial; bind: "com.victronenergy.solaredge_heartbeat/DetectedInverter4/Serial" }
+    VBusItem { id: slot4Ip; bind: "com.victronenergy.solaredge_heartbeat/DetectedInverter4/Ip" }
+    VBusItem { id: slot4Slave; bind: "com.victronenergy.solaredge_heartbeat/DetectedInverter4/SlaveId" }
 
-    VBusItem { id: slot5Serial; bind: serviceBind + "/DetectedInverter5/Serial" }
-    VBusItem { id: slot5Ip; bind: serviceBind + "/DetectedInverter5/Ip" }
-    VBusItem { id: slot5Slave; bind: serviceBind + "/DetectedInverter5/SlaveId" }
+    VBusItem { id: slot5Serial; bind: "com.victronenergy.solaredge_heartbeat/DetectedInverter5/Serial" }
+    VBusItem { id: slot5Ip; bind: "com.victronenergy.solaredge_heartbeat/DetectedInverter5/Ip" }
+    VBusItem { id: slot5Slave; bind: "com.victronenergy.solaredge_heartbeat/DetectedInverter5/SlaveId" }
 
     model: VisibleItemModel {
         MbSwitch {
@@ -64,51 +63,41 @@ MbPage {
             text: detectedCount.valid ? detectedCount.value : "--"
         }
 
-        MbItemText {
-            description: qsTr("Slot 1")
-            text: slot1Serial.valid && slot1Serial.value != "" ? (slot1Serial.value + " " + slot1Ip.value + " (id " + slot1Slave.value + ")") : "--"
-            wrapMode: Text.WordWrap
-        }
+        MbItemText { description: qsTr("Slot 1 Serial"); text: slot1Serial.valid ? slot1Serial.value : "--" }
+        MbItemText { description: qsTr("Slot 1 IP"); text: slot1Ip.valid ? slot1Ip.value : "--" }
+        MbItemText { description: qsTr("Slot 1 ID"); text: slot1Slave.valid ? slot1Slave.value : "--" }
         MbSwitch {
             name: qsTr("Fallback on Slot 1")
             bind: settingsBind + "/Settings/SolarEdge/FallbackSlot1Enabled"
         }
 
-        MbItemText {
-            description: qsTr("Slot 2")
-            text: slot2Serial.valid && slot2Serial.value != "" ? (slot2Serial.value + " " + slot2Ip.value + " (id " + slot2Slave.value + ")") : "--"
-            wrapMode: Text.WordWrap
-        }
+        MbItemText { description: qsTr("Slot 2 Serial"); text: slot2Serial.valid ? slot2Serial.value : "--" }
+        MbItemText { description: qsTr("Slot 2 IP"); text: slot2Ip.valid ? slot2Ip.value : "--" }
+        MbItemText { description: qsTr("Slot 2 ID"); text: slot2Slave.valid ? slot2Slave.value : "--" }
         MbSwitch {
             name: qsTr("Fallback on Slot 2")
             bind: settingsBind + "/Settings/SolarEdge/FallbackSlot2Enabled"
         }
 
-        MbItemText {
-            description: qsTr("Slot 3")
-            text: slot3Serial.valid && slot3Serial.value != "" ? (slot3Serial.value + " " + slot3Ip.value + " (id " + slot3Slave.value + ")") : "--"
-            wrapMode: Text.WordWrap
-        }
+        MbItemText { description: qsTr("Slot 3 Serial"); text: slot3Serial.valid ? slot3Serial.value : "--" }
+        MbItemText { description: qsTr("Slot 3 IP"); text: slot3Ip.valid ? slot3Ip.value : "--" }
+        MbItemText { description: qsTr("Slot 3 ID"); text: slot3Slave.valid ? slot3Slave.value : "--" }
         MbSwitch {
             name: qsTr("Fallback on Slot 3")
             bind: settingsBind + "/Settings/SolarEdge/FallbackSlot3Enabled"
         }
 
-        MbItemText {
-            description: qsTr("Slot 4")
-            text: slot4Serial.valid && slot4Serial.value != "" ? (slot4Serial.value + " " + slot4Ip.value + " (id " + slot4Slave.value + ")") : "--"
-            wrapMode: Text.WordWrap
-        }
+        MbItemText { description: qsTr("Slot 4 Serial"); text: slot4Serial.valid ? slot4Serial.value : "--" }
+        MbItemText { description: qsTr("Slot 4 IP"); text: slot4Ip.valid ? slot4Ip.value : "--" }
+        MbItemText { description: qsTr("Slot 4 ID"); text: slot4Slave.valid ? slot4Slave.value : "--" }
         MbSwitch {
             name: qsTr("Fallback on Slot 4")
             bind: settingsBind + "/Settings/SolarEdge/FallbackSlot4Enabled"
         }
 
-        MbItemText {
-            description: qsTr("Slot 5")
-            text: slot5Serial.valid && slot5Serial.value != "" ? (slot5Serial.value + " " + slot5Ip.value + " (id " + slot5Slave.value + ")") : "--"
-            wrapMode: Text.WordWrap
-        }
+        MbItemText { description: qsTr("Slot 5 Serial"); text: slot5Serial.valid ? slot5Serial.value : "--" }
+        MbItemText { description: qsTr("Slot 5 IP"); text: slot5Ip.valid ? slot5Ip.value : "--" }
+        MbItemText { description: qsTr("Slot 5 ID"); text: slot5Slave.valid ? slot5Slave.value : "--" }
         MbSwitch {
             name: qsTr("Fallback on Slot 5")
             bind: settingsBind + "/Settings/SolarEdge/FallbackSlot5Enabled"
