@@ -41,7 +41,18 @@ class SolarEdgeHeartbeat:
     SOLAREDGE_PRODUCT_KEYWORD = "SolarEdge"
 
     def __init__(self):
-        self.dbus = VeDbusService('com.victronenergy.solaredge_heartbeat')
+        # Victron's VeDbusService supports delaying DBus name registration.
+        # Some Venus images warn about outdated registration unless register=False
+        # is used and `register()` is called after adding mandatory paths.
+        name = 'com.victronenergy.solaredge_heartbeat'
+        self._dbus_registered_on_init = True
+        try:
+            self.dbus = VeDbusService(name, register=False)
+            self._dbus_registered_on_init = False
+        except TypeError:
+            # Older/variant VeDbusService ctor doesn't support register=False.
+            self.dbus = VeDbusService(name)
+
         self.dbus.add_path('/Mgmt/ProcessName', __file__)
         self.dbus.add_path('/Mgmt/ProcessVersion', '1.2')
         self.dbus.add_path('/Mgmt/Connection', 'Modbus TCP')
@@ -92,6 +103,14 @@ class SolarEdgeHeartbeat:
         if not HAVE_PYMODBUS:
             self.dbus['/Status'] = 'Missing dependency: pymodbus'
             logging.error('pymodbus import failed: %s', _PYMODBUS_IMPORT_ERROR)
+
+        # Finish DBus registration after mandatory paths have been added.
+        if not self._dbus_registered_on_init:
+            try:
+                self.dbus.register()
+            except Exception:
+                # If register() isn't supported or fails, the service may still work.
+                pass
 
     def handle_changed_setting(self, setting, oldvalue, newvalue):
         if setting == 'AutoDiscover' and newvalue == 1:
