@@ -27,6 +27,12 @@ packageAction() {
             removeService $packageName
             sed -i '/SolarEdge Heartbeat/d' "$qmlDir/PageSettings.qml"
             rm -f "$qmlDir/PageSolarEdge.qml"
+
+            # Remove any persisted package data (SetupHelper uses these locations)
+            rm -rf "/data/$packageName" "/data/setupOptions/$packageName"
+
+            # Remove our own log files (if we created them)
+            rm -rf "$(dirname "$packageLogFile")"
             
             restartGui=true
             ;;
