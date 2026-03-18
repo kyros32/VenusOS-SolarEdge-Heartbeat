@@ -1,6 +1,5 @@
 import QtQuick 1.1
 import com.victron.velib 1.0
-import "utils.js" as Utils
 
 MbPage {
     id: root
@@ -10,16 +9,16 @@ MbPage {
     property string settingsBind: "com.victronenergy.settings"
     property string serviceBind: "com.victronenergy.solaredge"
 
-    VBusItem { id: statusItem; bind: Utils.path(serviceBind, "/Status") }
-    VBusItem { id: activeDevices; bind: Utils.path(serviceBind, "/ActiveDevices") }
-    VBusItem { id: gridControl; bind: Utils.path(serviceBind, "/GridControlEnabled") }
-    VBusItem { id: timeout; bind: Utils.path(serviceBind, "/ActualTimeout") }
-    VBusItem { id: fallback; bind: Utils.path(serviceBind, "/ActualFallbackPower") }
+    VBusItem { id: statusItem; bind: serviceBind + "/Status" }
+    VBusItem { id: activeDevices; bind: serviceBind + "/ActiveDevices" }
+    VBusItem { id: gridControl; bind: serviceBind + "/GridControlEnabled" }
+    VBusItem { id: timeout; bind: serviceBind + "/ActualTimeout" }
+    VBusItem { id: fallback; bind: serviceBind + "/ActualFallbackPower" }
 
     model: VisibleItemModel {
         MbSwitch {
             name: qsTr("Enable Heartbeat Service")
-            bind: Utils.path(settingsBind, "/Settings/SolarEdge/EnableService")
+            bind: settingsBind + "/Settings/SolarEdge/EnableService"
         }
 
         MbItemText {
@@ -35,17 +34,17 @@ MbPage {
 
         MbSwitch {
             name: qsTr("Scan Network for Inverters")
-            bind: Utils.path(settingsBind, "/Settings/SolarEdge/AutoDiscover")
+            bind: settingsBind + "/Settings/SolarEdge/AutoDiscover"
         }
 
         MbEditBox {
             description: qsTr("Inverter IPs (comma separated)")
-            item.bind: Utils.path(settingsBind, "/Settings/SolarEdge/IpAddresses")
+            item.bind: settingsBind + "/Settings/SolarEdge/IpAddresses"
         }
 
         MbItemValue {
             description: qsTr("Modbus Slave ID")
-            item.bind: Utils.path(settingsBind, "/Settings/SolarEdge/SlaveId")
+            item.bind: settingsBind + "/Settings/SolarEdge/SlaveId"
         }
 
         MbItemValue {
@@ -67,13 +66,13 @@ MbPage {
 
         MbItemValue {
             description: qsTr("Set Target Timeout")
-            item.bind: Utils.path(settingsBind, "/Settings/SolarEdge/TargetTimeout")
+            item.bind: settingsBind + "/Settings/SolarEdge/TargetTimeout"
             unit: "s"
         }
 
         MbItemValue {
             description: qsTr("Set Target Fallback Power")
-            item.bind: Utils.path(settingsBind, "/Settings/SolarEdge/TargetFallback")
+            item.bind: settingsBind + "/Settings/SolarEdge/TargetFallbackPower"
             unit: "%"
         }
     }
