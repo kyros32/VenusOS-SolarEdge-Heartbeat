@@ -6,12 +6,10 @@ import time
 import re
 try:
     from pymodbus.client.tcp import ModbusTcpClient
-    from pymodbus.client.mixin import ModbusClientMixin
     HAVE_PYMODBUS = True
 except Exception as e:
     # If pymodbus is missing, we still want to export settings to keep the UI usable.
     ModbusTcpClient = None
-    ModbusClientMixin = None
     HAVE_PYMODBUS = False
     _PYMODBUS_IMPORT_ERROR = str(e)
 
@@ -334,31 +332,22 @@ class SolarEdgeHeartbeat:
                 try:
                     resp = client.read_holding_registers(61762, count=2, slave=slave_id)
                     if not resp.isError():
-                        val = client.convert_from_registers(
-                            resp.registers,
-                            ModbusClientMixin.DATATYPE.UINT32,
-                            word_order='little',
-                        )
+                        # 2x uint16 registers -> uint32, little word order
+                        regs = resp.registers
+                        val = (int(regs[1]) << 16) | int(regs[0])
                         if idx == 0:
                             ui_grid_enabled = val  # Display first device's state on UI
 
                         if val == 0:
                             client.write_registers(
                                 61762,
-                                client.convert_to_registers(
-                                    1,
-                                    ModbusClientMixin.DATATYPE.UINT32,
-                                    word_order='little',
-                                ),
+                                # uint32(1) -> [low_word, high_word] for little word order
+                                [1 & 0xFFFF, (1 >> 16) & 0xFFFF],
                                 slave=slave_id,
                             )
                             client.write_registers(
                                 61696,
-                                client.convert_to_registers(
-                                    1,
-                                    ModbusClientMixin.DATATYPE.UINT16,
-                                    word_order='little',
-                                ),
+                                [1 & 0xFFFF],
                                 slave=slave_id,
                             )
 
@@ -366,16 +355,17 @@ class SolarEdgeHeartbeat:
                     f_resp = client.read_holding_registers(62226, count=2, slave=slave_id)
 
                     if not t_resp.isError() and not f_resp.isError():
-                        curr_t = client.convert_from_registers(
-                            t_resp.registers,
-                            ModbusClientMixin.DATATYPE.UINT32,
-                            word_order='little',
-                        )
-                        curr_f = client.convert_from_registers(
-                            f_resp.registers,
-                            ModbusClientMixin.DATATYPE.FLOAT32,
-                            word_order='little',
-                        )
+                        # 2x uint16 -> uint32 (little word order)
+                        t_regs = t_resp.registers
+                        curr_t = (int(t_regs[1]) << 16) | int(t_regs[0])
+
+                        # 2x uint16 -> float32 (little word order, with big-endian float bytes)
+                        import struct
+                        f_regs = f_resp.registers
+                        # word_order='little' means the *low* word comes first.
+                        # So swap word order to form standard big-endian float bytes.
+                        f_bytes = int(f_regs[1]).to_bytes(2, 'big') + int(f_regs[0]).to_bytes(2, 'big')
+                        curr_f = struct.unpack('>f', f_bytes)[0]
 
                         if idx == 0:
                             ui_actual_t = curr_t
@@ -384,21 +374,20 @@ class SolarEdgeHeartbeat:
                         if curr_t != target_t:
                             client.write_registers(
                                 62224,
-                                client.convert_to_registers(
-                                    target_t,
-                                    ModbusClientMixin.DATATYPE.UINT32,
-                                    word_order='little',
-                                ),
+                                # uint32 -> [low_word, high_word]
+                                [int(target_t) & 0xFFFF, (int(target_t) >> 16) & 0xFFFF],
                                 slave=slave_id,
                             )
                         if curr_f != target_f:
+                            import struct
+                            # float32 -> 2x uint16 registers, word_order='little'
+                            f_bytes = struct.pack('>f', float(target_f))
+                            high_word = int.from_bytes(f_bytes[0:2], 'big')
+                            low_word = int.from_bytes(f_bytes[2:4], 'big')
+                            f_regs_out = [low_word, high_word]
                             client.write_registers(
                                 62226,
-                                client.convert_to_registers(
-                                    target_f,
-                                    ModbusClientMixin.DATATYPE.FLOAT32,
-                                    word_order='little',
-                                ),
+                                f_regs_out,
                                 slave=slave_id,
                             )
 
