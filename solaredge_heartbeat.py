@@ -41,6 +41,19 @@ class SolarEdgeHeartbeat:
     REG_COMMAND_TIMEOUT = 0xF310    # UINT32
     REG_FALLBACK_LIMIT = 0xF312     # FLOAT32
 
+    def _read_regs(self, client, address, count, slave_id):
+        # pymodbus 2.x uses `unit`; some newer variants use `slave`.
+        try:
+            return client.read_holding_registers(address, count=count, unit=slave_id)
+        except TypeError:
+            return client.read_holding_registers(address, count=count, slave=slave_id)
+
+    def _write_regs(self, client, address, values, slave_id):
+        try:
+            return client.write_registers(address, values, unit=slave_id)
+        except TypeError:
+            return client.write_registers(address, values, slave=slave_id)
+
     def __init__(self):
         # Victron's VeDbusService supports delaying DBus name registration.
         # Some Venus images warn about outdated registration unless register=False
@@ -156,9 +169,9 @@ class SolarEdgeHeartbeat:
                         client = ModbusTcpClient(test_ip, port=502, timeout=1)
                         if client.connect():
                             for test_slave in [126, 1, 2, 3]:
-                                resp = client.read_holding_registers(40000, count=2, slave=test_slave)
+                                resp = self._read_regs(client, 40000, 2, test_slave)
                                 if not resp.isError() and resp.registers[0] == 0x5375 and resp.registers[1] == 0x6E53:
-                                    manuf_resp = client.read_holding_registers(40004, count=1, slave=test_slave)
+                                    manuf_resp = self._read_regs(client, 40004, 1, test_slave)
                                     if not manuf_resp.isError() and manuf_resp.registers[0] == 0x536F:
                                         found_ips.append(test_ip)
                                         found_slave = test_slave
@@ -369,7 +382,7 @@ class SolarEdgeHeartbeat:
             client = ModbusTcpClient(ip, port=502, timeout=2)
             if client.connect():
                 try:
-                    resp = client.read_holding_registers(self.REG_GRID_CONTROL, count=2, slave=slave_id)
+                    resp = self._read_regs(client, self.REG_GRID_CONTROL, 2, slave_id)
                     if not resp.isError():
                         # 2x uint16 registers -> uint32, little word order
                         regs = resp.registers
@@ -379,27 +392,28 @@ class SolarEdgeHeartbeat:
 
                         wrote_control = False
                         if val == 0:
-                            client.write_registers(
+                            self._write_regs(
+                                client,
                                 self.REG_GRID_CONTROL,
                                 # uint32(1) -> [low_word, high_word] for little word order
                                 [1 & 0xFFFF, (1 >> 16) & 0xFFFF],
-                                slave=slave_id,
+                                slave_id,
                             )
                             wrote_control = True
 
                         # Ensure dynamic control is enabled (0xF300 == 1)
-                        dyn_resp = client.read_holding_registers(self.REG_ENABLE_DYNAMIC, count=1, slave=slave_id)
+                        dyn_resp = self._read_regs(client, self.REG_ENABLE_DYNAMIC, 1, slave_id)
                         if not dyn_resp.isError():
                             if int(dyn_resp.registers[0]) != 1:
-                                client.write_registers(self.REG_ENABLE_DYNAMIC, [1], slave=slave_id)
+                                self._write_regs(client, self.REG_ENABLE_DYNAMIC, [1], slave_id)
                                 wrote_control = True
 
                         # Commit only when we changed control enable flags
                         if wrote_control:
-                            client.write_registers(self.REG_GRID_CONTROL_COMMIT, [1], slave=slave_id)
+                            self._write_regs(client, self.REG_GRID_CONTROL_COMMIT, [1], slave_id)
 
-                    t_resp = client.read_holding_registers(self.REG_COMMAND_TIMEOUT, count=2, slave=slave_id)
-                    f_resp = client.read_holding_registers(self.REG_FALLBACK_LIMIT, count=2, slave=slave_id)
+                    t_resp = self._read_regs(client, self.REG_COMMAND_TIMEOUT, 2, slave_id)
+                    f_resp = self._read_regs(client, self.REG_FALLBACK_LIMIT, 2, slave_id)
 
                     if not t_resp.isError() and not f_resp.isError():
                         # 2x uint16 -> uint32 (little word order)
@@ -428,11 +442,12 @@ class SolarEdgeHeartbeat:
 
                         wrote_setpoint = False
                         if curr_t != target_t:
-                            client.write_registers(
+                            self._write_regs(
+                                client,
                                 self.REG_COMMAND_TIMEOUT,
                                 # uint32 -> [low_word, high_word]
                                 [int(target_t) & 0xFFFF, (int(target_t) >> 16) & 0xFFFF],
-                                slave=slave_id,
+                                slave_id,
                             )
                             wrote_setpoint = True
                         if curr_f != target_f:
@@ -442,17 +457,13 @@ class SolarEdgeHeartbeat:
                             high_word = int.from_bytes(f_bytes[0:2], 'big')
                             low_word = int.from_bytes(f_bytes[2:4], 'big')
                             f_regs_out = [low_word, high_word]
-                            client.write_registers(
-                                self.REG_FALLBACK_LIMIT,
-                                f_regs_out,
-                                slave=slave_id,
-                            )
+                            self._write_regs(client, self.REG_FALLBACK_LIMIT, f_regs_out, slave_id)
                             wrote_setpoint = True
 
                         # Verify by re-reading once after write.
                         if wrote_setpoint:
-                            t_verify = client.read_holding_registers(self.REG_COMMAND_TIMEOUT, count=2, slave=slave_id)
-                            f_verify = client.read_holding_registers(self.REG_FALLBACK_LIMIT, count=2, slave=slave_id)
+                            t_verify = self._read_regs(client, self.REG_COMMAND_TIMEOUT, 2, slave_id)
+                            f_verify = self._read_regs(client, self.REG_FALLBACK_LIMIT, 2, slave_id)
                             if not t_verify.isError() and not f_verify.isError():
                                 tv = (int(t_verify.registers[1]) << 16) | int(t_verify.registers[0])
                                 import struct
