@@ -70,6 +70,8 @@ class SolarEdgeHeartbeat:
             self.dbus.add_path(f'/DetectedInverter{idx}/Ip', '')
             self.dbus.add_path(f'/DetectedInverter{idx}/SlaveId', 0)
             self.dbus.add_path(f'/DetectedInverter{idx}/ProductName', '')
+            self.dbus.add_path(f'/DetectedInverter{idx}/ActualTimeout', 0)
+            self.dbus.add_path(f'/DetectedInverter{idx}/ActualFallbackPower', 0.0)
 
         self._last_dbus_discovery = 0
 
@@ -77,18 +79,23 @@ class SolarEdgeHeartbeat:
         self.settings = SettingsDevice(
             self.dbus.dbusconn,
             supportedSettings={
-                'IpAddresses': ['/Settings/SolarEdge/IpAddresses', '192.168.1.221', 0, 0],
-                'SlaveId': ['/Settings/SolarEdge/SlaveId', 126, 1, 255],
-                'TargetTimeout': ['/Settings/SolarEdge/TargetTimeout', 60, 0, 3600],
-                'TargetFallback': ['/Settings/SolarEdge/TargetFallbackPower', 0.0, 0.0, 100.0],
                 'EnableService': ['/Settings/SolarEdge/EnableService', 1, 0, 1],
-                'AutoDiscover': ['/Settings/SolarEdge/AutoDiscover', 0, 0, 1],
                 'AutoDetectDbus': ['/Settings/SolarEdge/AutoDetectDbus', 0, 0, 1],
                 'FallbackSlot1Enabled': ['/Settings/SolarEdge/FallbackSlot1Enabled', 0, 0, 1],
                 'FallbackSlot2Enabled': ['/Settings/SolarEdge/FallbackSlot2Enabled', 0, 0, 1],
                 'FallbackSlot3Enabled': ['/Settings/SolarEdge/FallbackSlot3Enabled', 0, 0, 1],
                 'FallbackSlot4Enabled': ['/Settings/SolarEdge/FallbackSlot4Enabled', 0, 0, 1],
                 'FallbackSlot5Enabled': ['/Settings/SolarEdge/FallbackSlot5Enabled', 0, 0, 1],
+                'TargetTimeoutSlot1': ['/Settings/SolarEdge/TargetTimeoutSlot1', 60, 0, 3600],
+                'TargetFallbackPowerSlot1': ['/Settings/SolarEdge/TargetFallbackPowerSlot1', 0.0, 0.0, 100.0],
+                'TargetTimeoutSlot2': ['/Settings/SolarEdge/TargetTimeoutSlot2', 60, 0, 3600],
+                'TargetFallbackPowerSlot2': ['/Settings/SolarEdge/TargetFallbackPowerSlot2', 0.0, 0.0, 100.0],
+                'TargetTimeoutSlot3': ['/Settings/SolarEdge/TargetTimeoutSlot3', 60, 0, 3600],
+                'TargetFallbackPowerSlot3': ['/Settings/SolarEdge/TargetFallbackPowerSlot3', 0.0, 0.0, 100.0],
+                'TargetTimeoutSlot4': ['/Settings/SolarEdge/TargetTimeoutSlot4', 60, 0, 3600],
+                'TargetFallbackPowerSlot4': ['/Settings/SolarEdge/TargetFallbackPowerSlot4', 0.0, 0.0, 100.0],
+                'TargetTimeoutSlot5': ['/Settings/SolarEdge/TargetTimeoutSlot5', 60, 0, 3600],
+                'TargetFallbackPowerSlot5': ['/Settings/SolarEdge/TargetFallbackPowerSlot5', 0.0, 0.0, 100.0],
             },
             eventCallback=self.handle_changed_setting,
         )
@@ -108,9 +115,6 @@ class SolarEdgeHeartbeat:
                 pass
 
     def handle_changed_setting(self, setting, oldvalue, newvalue):
-        if setting == 'AutoDiscover' and newvalue == 1:
-            threading.Thread(target=self.scan_network).start()
-
         # When enabled, discover SolarEdge PV inverter connection info from the system DBus.
         if setting == 'AutoDetectDbus' and newvalue == 1:
             threading.Thread(target=self.discover_solar_edge_from_dbus).start()
@@ -297,11 +301,16 @@ class SolarEdgeHeartbeat:
                 self.dbus[f'/DetectedInverter{i+1}/Ip'] = slot.get('ip', '')
                 self.dbus[f'/DetectedInverter{i+1}/SlaveId'] = int(slot.get('slave', 0) or 0)
                 self.dbus[f'/DetectedInverter{i+1}/ProductName'] = slot.get('product', '')
+                # Clear actual values until the next Modbus poll.
+                self.dbus[f'/DetectedInverter{i+1}/ActualTimeout'] = 0
+                self.dbus[f'/DetectedInverter{i+1}/ActualFallbackPower'] = 0.0
             else:
                 self.dbus[f'/DetectedInverter{i+1}/Serial'] = ''
                 self.dbus[f'/DetectedInverter{i+1}/Ip'] = ''
                 self.dbus[f'/DetectedInverter{i+1}/SlaveId'] = 0
                 self.dbus[f'/DetectedInverter{i+1}/ProductName'] = ''
+                self.dbus[f'/DetectedInverter{i+1}/ActualTimeout'] = 0
+                self.dbus[f'/DetectedInverter{i+1}/ActualFallbackPower'] = 0.0
 
         return False
 
@@ -316,9 +325,6 @@ class SolarEdgeHeartbeat:
             self.dbus['/ActiveDevices'] = 'None'
             return True
 
-        target_t = int(self.settings['TargetTimeout'])
-        target_f = float(self.settings['TargetFallback'])
-
         status_list = []
         ui_actual_t = 0
         ui_actual_f = 0.0
@@ -326,47 +332,34 @@ class SolarEdgeHeartbeat:
         overall_status = "Running OK"
 
         targets = []
-        # Priority: DBus-based discovery mode
-        if self.settings['AutoDetectDbus'] == 1:
-            # Throttle refresh so we don't spam DBus.
-            now = time.time()
-            if (now - self._last_dbus_discovery) >= self.DBUS_DISCOVERY_THROTTLE_SECS:
-                self._last_dbus_discovery = now
-                threading.Thread(target=self.discover_solar_edge_from_dbus).start()
+        if self.settings['AutoDetectDbus'] != 1:
+            self.dbus['/Status'] = 'DBus autodetect disabled'
+            self.dbus['/ActiveDevices'] = 'None'
+            return True
 
-            for idx in range(self.MAX_DETECTED_SLOTS):
-                enabled_key = f'FallbackSlot{idx+1}Enabled'
-                if int(self.settings[enabled_key]) != 1:
-                    continue
-                slot = self.detected_slots[idx]
-                if not slot.get('ip'):
-                    continue
-                targets.append((slot.get('ip'), int(slot.get('slave', 0) or 0), slot.get('serial', '')))
-        else:
-            # Optional network scan mode (older behavior)
-            if self.settings['AutoDiscover'] == 1:
-                return True
+        # Throttle refresh so we don't spam DBus.
+        now = time.time()
+        if (now - self._last_dbus_discovery) >= self.DBUS_DISCOVERY_THROTTLE_SECS:
+            self._last_dbus_discovery = now
+            threading.Thread(target=self.discover_solar_edge_from_dbus).start()
 
-            # Parse the comma-separated list of IPs
-            raw_ips = self.settings['IpAddresses']
-            ips = [ip.strip() for ip in raw_ips.split(',') if ip.strip()]
-
-            if not ips:
-                self.dbus['/Status'] = 'No IPs configured'
-                self.dbus['/ActiveDevices'] = 'None'
-                return True
-
-            slave_id = int(self.settings['SlaveId'])
-            for ip in ips:
-                targets.append((ip, slave_id, ''))
+        for idx in range(self.MAX_DETECTED_SLOTS):
+            slot_index = idx + 1
+            enabled_key = f'FallbackSlot{slot_index}Enabled'
+            if int(self.settings[enabled_key]) != 1:
+                continue
+            slot = self.detected_slots[idx]
+            if not slot.get('ip'):
+                continue
+            targets.append((slot_index, slot.get('ip'), int(slot.get('slave', 0) or 0)))
 
         if not targets:
             self.dbus['/Status'] = 'No enabled SolarEdge inverters'
             self.dbus['/ActiveDevices'] = 'None'
             return True
 
-        # Loop through all configured targets (ip + per-device modbus slave id)
-        for idx, (ip, slave_id, serial_hint) in enumerate(targets):
+        # Loop through all enabled targets (per-slot)
+        for idx, (slot_index, ip, slave_id) in enumerate(targets):
             client = ModbusTcpClient(ip, port=502, timeout=2)
             if client.connect():
                 try:
@@ -411,6 +404,14 @@ class SolarEdgeHeartbeat:
                             ui_actual_t = curr_t
                             ui_actual_f = curr_f
 
+                        # Publish per-slot actual values for the UI
+                        self.dbus[f'/DetectedInverter{slot_index}/ActualTimeout'] = curr_t
+                        self.dbus[f'/DetectedInverter{slot_index}/ActualFallbackPower'] = curr_f
+
+                        # Slot-specific target values from settings
+                        target_t = int(self.settings[f'TargetTimeoutSlot{slot_index}'])
+                        target_f = float(self.settings[f'TargetFallbackPowerSlot{slot_index}'])
+
                         if curr_t != target_t:
                             client.write_registers(
                                 62224,
@@ -431,14 +432,14 @@ class SolarEdgeHeartbeat:
                                 slave=slave_id,
                             )
 
-                    status_list.append(f"{ip} (id {slave_id}): OK")
+                    status_list.append(f"Slot {slot_index}: {ip} (id {slave_id}): OK")
                 except Exception:
-                    status_list.append(f"{ip} (id {slave_id}): ERR")
+                    status_list.append(f"Slot {slot_index}: {ip} (id {slave_id}): ERR")
                     overall_status = "Errors Present"
                 finally:
                     client.close()
             else:
-                status_list.append(f"{ip} (id {slave_id}): OFF")
+                status_list.append(f"Slot {slot_index}: {ip} (id {slave_id}): OFF")
                 overall_status = "Offline Devices"
 
         # Publish the aggregated data to the UI
