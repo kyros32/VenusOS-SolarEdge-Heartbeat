@@ -34,6 +34,12 @@ class SolarEdgeHeartbeat:
     MAX_DETECTED_SLOTS = 5
     DBUS_DISCOVERY_THROTTLE_SECS = 60
     SOLAREDGE_PRODUCT_KEYWORD = "SolarEdge"
+    # Register map (zero-based addressing)
+    REG_GRID_CONTROL = 0xF142       # UINT32
+    REG_GRID_CONTROL_COMMIT = 0xF100  # UINT16 write-only
+    REG_ENABLE_DYNAMIC = 0xF300     # UINT16
+    REG_COMMAND_TIMEOUT = 0xF310    # UINT32
+    REG_FALLBACK_LIMIT = 0xF312     # FLOAT32
 
     def __init__(self):
         # Victron's VeDbusService supports delaying DBus name registration.
@@ -363,7 +369,7 @@ class SolarEdgeHeartbeat:
             client = ModbusTcpClient(ip, port=502, timeout=2)
             if client.connect():
                 try:
-                    resp = client.read_holding_registers(61762, count=2, slave=slave_id)
+                    resp = client.read_holding_registers(self.REG_GRID_CONTROL, count=2, slave=slave_id)
                     if not resp.isError():
                         # 2x uint16 registers -> uint32, little word order
                         regs = resp.registers
@@ -371,21 +377,29 @@ class SolarEdgeHeartbeat:
                         if idx == 0:
                             ui_grid_enabled = val  # Display first device's state on UI
 
+                        wrote_control = False
                         if val == 0:
                             client.write_registers(
-                                61762,
+                                self.REG_GRID_CONTROL,
                                 # uint32(1) -> [low_word, high_word] for little word order
                                 [1 & 0xFFFF, (1 >> 16) & 0xFFFF],
                                 slave=slave_id,
                             )
-                            client.write_registers(
-                                61696,
-                                [1 & 0xFFFF],
-                                slave=slave_id,
-                            )
+                            wrote_control = True
 
-                    t_resp = client.read_holding_registers(62224, count=2, slave=slave_id)
-                    f_resp = client.read_holding_registers(62226, count=2, slave=slave_id)
+                        # Ensure dynamic control is enabled (0xF300 == 1)
+                        dyn_resp = client.read_holding_registers(self.REG_ENABLE_DYNAMIC, count=1, slave=slave_id)
+                        if not dyn_resp.isError():
+                            if int(dyn_resp.registers[0]) != 1:
+                                client.write_registers(self.REG_ENABLE_DYNAMIC, [1], slave=slave_id)
+                                wrote_control = True
+
+                        # Commit only when we changed control enable flags
+                        if wrote_control:
+                            client.write_registers(self.REG_GRID_CONTROL_COMMIT, [1], slave=slave_id)
+
+                    t_resp = client.read_holding_registers(self.REG_COMMAND_TIMEOUT, count=2, slave=slave_id)
+                    f_resp = client.read_holding_registers(self.REG_FALLBACK_LIMIT, count=2, slave=slave_id)
 
                     if not t_resp.isError() and not f_resp.isError():
                         # 2x uint16 -> uint32 (little word order)
@@ -412,13 +426,15 @@ class SolarEdgeHeartbeat:
                         target_t = int(self.settings[f'TargetTimeoutSlot{slot_index}'])
                         target_f = float(self.settings[f'TargetFallbackPowerSlot{slot_index}'])
 
+                        wrote_setpoint = False
                         if curr_t != target_t:
                             client.write_registers(
-                                62224,
+                                self.REG_COMMAND_TIMEOUT,
                                 # uint32 -> [low_word, high_word]
                                 [int(target_t) & 0xFFFF, (int(target_t) >> 16) & 0xFFFF],
                                 slave=slave_id,
                             )
+                            wrote_setpoint = True
                         if curr_f != target_f:
                             import struct
                             # float32 -> 2x uint16 registers, word_order='little'
@@ -427,12 +443,30 @@ class SolarEdgeHeartbeat:
                             low_word = int.from_bytes(f_bytes[2:4], 'big')
                             f_regs_out = [low_word, high_word]
                             client.write_registers(
-                                62226,
+                                self.REG_FALLBACK_LIMIT,
                                 f_regs_out,
                                 slave=slave_id,
                             )
+                            wrote_setpoint = True
 
-                    status_list.append(f"Slot {slot_index}: {ip} (id {slave_id}): OK")
+                        # Verify by re-reading once after write.
+                        if wrote_setpoint:
+                            t_verify = client.read_holding_registers(self.REG_COMMAND_TIMEOUT, count=2, slave=slave_id)
+                            f_verify = client.read_holding_registers(self.REG_FALLBACK_LIMIT, count=2, slave=slave_id)
+                            if not t_verify.isError() and not f_verify.isError():
+                                tv = (int(t_verify.registers[1]) << 16) | int(t_verify.registers[0])
+                                import struct
+                                fb = int(f_verify.registers[1]).to_bytes(2, 'big') + int(f_verify.registers[0]).to_bytes(2, 'big')
+                                fv = struct.unpack('>f', fb)[0]
+                                # Keep UI aligned with verified values for first enabled slot
+                                if idx == 0:
+                                    ui_actual_t = tv
+                                    ui_actual_f = fv
+
+                        status_list.append(f"Slot {slot_index}: {ip} (id {slave_id}): OK t={curr_t}s f={curr_f:.2f}%")
+                    else:
+                        status_list.append(f"Slot {slot_index}: {ip} (id {slave_id}): REG ERR")
+                        overall_status = "Errors Present"
                 except Exception:
                     status_list.append(f"Slot {slot_index}: {ip} (id {slave_id}): ERR")
                     overall_status = "Errors Present"
