@@ -4,6 +4,10 @@ import threading
 import socket
 import time
 import re
+import struct
+import glob
+import subprocess
+import signal
 try:
     # Venus image you tested with (pymodbus 2.5.3) exposes ModbusTcpClient
     # via pymodbus.client.sync (not pymodbus.client or pymodbus.client.tcp).
@@ -14,6 +18,13 @@ except Exception as e:
     ModbusTcpClient = None
     HAVE_PYMODBUS = False
     _PYMODBUS_IMPORT_ERROR = str(e)
+
+try:
+    # Used to distinguish a connection-level failure (RST / single Modbus
+    # session refused) from a normal Modbus exception (illegal address, etc.).
+    from pymodbus.exceptions import ModbusIOException
+except Exception:
+    ModbusIOException = None
 
 sys.path.insert(1, os.path.join(os.path.dirname(__file__), '/opt/victronenergy/dbus-systemcalc-py/ext/velib_python'))
 from vedbus import VeDbusService
@@ -34,6 +45,15 @@ class SolarEdgeHeartbeat:
     MAX_DETECTED_SLOTS = 5
     DBUS_DISCOVERY_THROTTLE_SECS = 60
     SOLAREDGE_PRODUCT_KEYWORD = "SolarEdge"
+    # Some SolarEdge models (e.g. SE30K) serve only ONE Modbus TCP session.
+    # dbus-fronius owns it, so a second session from us gets RST. For those we
+    # briefly pause dbus-fronius, take the session, write+verify, and hand it
+    # back. These registers are persistent and dbus-fronius's polling keeps the
+    # inverter's comm-loss watchdog fed, so this only needs to run periodically.
+    DBUS_FRONIUS_SERVICE = '/service/dbus-fronius'
+    HANDOFF_REASSERT_SECS = 900          # periodic re-assert cadence (15 min)
+    SESSION_FREE_TIMEOUT_SECS = 15       # max wait for the inverter to free its session
+    HANDOFF_PROBE_TIMEOUT = 3            # per-probe socket timeout while waiting
     # Register map (zero-based addressing)
     REG_GRID_CONTROL = 0xF142       # UINT32
     REG_GRID_CONTROL_COMMIT = 0xF100  # UINT16 write-only
@@ -94,6 +114,19 @@ class SolarEdgeHeartbeat:
 
         self._last_dbus_discovery = 0
 
+        # Per-inverter (keyed by serial) connection mode and last-verified values.
+        #   inv_mode[serial]    -> 'unknown' | 'inplace' | 'handoff'
+        #   inv_actuals[serial] -> {'status','timeout','fallback','grid'}
+        self.inv_mode = {}
+        self.inv_actuals = {}
+        # Serialize handoff windows so the periodic timer, startup probe and
+        # settings-change triggers never stop dbus-fronius concurrently.
+        self._handoff_lock = threading.Lock()
+        # True while dbus-fronius is paused for a handoff. Discovery must be
+        # skipped then, otherwise the vanished pvinverter services would clear
+        # the detected slots until fronius restarts.
+        self._handoff_active = False
+
         # Changed to IpAddresses to support comma-separated lists
         self.settings = SettingsDevice(
             self.dbus.dbusconn,
@@ -120,6 +153,10 @@ class SolarEdgeHeartbeat:
         )
 
         GLib.timeout_add(10000, self.update)
+        # Periodic re-assert for single-session (handoff) inverters. No-op when
+        # there are none, so inverters that tolerate a 2nd session are never
+        # disrupted by this timer.
+        GLib.timeout_add(self.HANDOFF_REASSERT_SECS * 1000, self.periodic_handoff)
 
         if not HAVE_PYMODBUS:
             self.dbus['/Status'] = 'Missing dependency: pymodbus'
@@ -133,10 +170,36 @@ class SolarEdgeHeartbeat:
                 # If register() isn't supported or fails, the service may still work.
                 pass
 
+        # If we're killed (Venus shutdown / package update) mid-handoff,
+        # dbus-fronius would stay paused and all PV monitoring would stop.
+        # Restore it before exiting. Prefer GLib's signal integration since a
+        # plain Python handler may not fire while the main loop is blocked.
+        try:
+            GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal.SIGTERM, self._on_term)
+            GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal.SIGINT, self._on_term)
+        except Exception:
+            signal.signal(signal.SIGTERM, lambda *a: self._on_term())
+            signal.signal(signal.SIGINT, lambda *a: self._on_term())
+
+    def _on_term(self, *args):
+        if self._handoff_active:
+            try:
+                self._svc('-u', self._find_fronius_service())
+            except Exception:
+                pass
+        os._exit(0)
+
     def handle_changed_setting(self, setting, oldvalue, newvalue):
         # When enabled, discover SolarEdge PV inverter connection info from the system DBus.
         if setting == 'AutoDetectDbus' and newvalue == 1:
             threading.Thread(target=self.discover_solar_edge_from_dbus).start()
+
+        # Target/enable changes must reach handoff-mode inverters promptly (the
+        # 10s loop only touches in-place ones). No-op when none are in handoff.
+        if setting.startswith('TargetTimeoutSlot') or \
+           setting.startswith('TargetFallbackPowerSlot') or \
+           setting.startswith('FallbackSlot'):
+            self.trigger_handoff()
 
     def scan_network(self):
         if not HAVE_PYMODBUS:
@@ -244,6 +307,11 @@ class SolarEdgeHeartbeat:
             GLib.idle_add(self.update_status, 'DBus module not available')
             return
 
+        # dbus-fronius is paused for a handoff; its pvinverter services are gone
+        # right now, so skip this cycle rather than clearing the detected slots.
+        if self._handoff_active:
+            return
+
         GLib.idle_add(self.update_status, 'DBus autodetect: scanning SolarEdge pvinverter services...')
 
         try:
@@ -303,6 +371,10 @@ class SolarEdgeHeartbeat:
         GLib.idle_add(self.update_status, f'DBus autodetect: found {len(detected)} SolarEdge devices')
 
     def apply_detected_inverters(self, detected):
+        # A discovery that began just before a handoff could land here with an
+        # empty list (fronius down). Don't wipe known slots in that case.
+        if not detected and self._handoff_active:
+            return False
         # Keep discovered slots stable by sorting by serial.
         self.detected_slots = [
             {"serial": "", "ip": "", "slave": 0, "product": ""}
@@ -320,18 +392,223 @@ class SolarEdgeHeartbeat:
                 self.dbus[f'/DetectedInverter{i+1}/Ip'] = slot.get('ip', '')
                 self.dbus[f'/DetectedInverter{i+1}/SlaveId'] = int(slot.get('slave', 0) or 0)
                 self.dbus[f'/DetectedInverter{i+1}/ProductName'] = slot.get('product', '')
-                # Clear actual values until the next Modbus poll.
-                self.dbus[f'/DetectedInverter{i+1}/ActualTimeout'] = 0
-                self.dbus[f'/DetectedInverter{i+1}/ActualFallbackPower'] = 0.0
             else:
                 self.dbus[f'/DetectedInverter{i+1}/Serial'] = ''
                 self.dbus[f'/DetectedInverter{i+1}/Ip'] = ''
                 self.dbus[f'/DetectedInverter{i+1}/SlaveId'] = 0
                 self.dbus[f'/DetectedInverter{i+1}/ProductName'] = ''
-                self.dbus[f'/DetectedInverter{i+1}/ActualTimeout'] = 0
-                self.dbus[f'/DetectedInverter{i+1}/ActualFallbackPower'] = 0.0
 
+        # Actual (verified) values come from the per-serial cache so handoff
+        # readings survive a discovery refresh instead of being zeroed.
+        self._publish_slot_ui()
         return False
+
+    def _publish_slot_ui(self):
+        """Refresh per-slot Actual* paths from the per-serial cache (main loop)."""
+        for i in range(self.MAX_DETECTED_SLOTS):
+            serial = self.detected_slots[i].get('serial', '')
+            a = self.inv_actuals.get(serial, {})
+            self.dbus[f'/DetectedInverter{i+1}/ActualTimeout'] = int(a.get('timeout') or 0)
+            self.dbus[f'/DetectedInverter{i+1}/ActualFallbackPower'] = float(a.get('fallback') or 0.0)
+        return False
+
+    def _is_conn_error(self, resp):
+        """True for a connection-level failure (RST/timeout) vs a Modbus exception."""
+        if ModbusIOException is not None and isinstance(resp, ModbusIOException):
+            return True
+        return type(resp).__name__ == 'ModbusIOException'
+
+    def _configure_inverter(self, client, slot_index, slave_id):
+        """Read/ensure grid-control config on an already-connected client.
+
+        Returns a dict with 'status' in {OK, REG ERR, RST, ERR} plus the
+        verified 'grid_enabled'/'timeout'/'fallback'. Does no DBus writes so it
+        is safe to call from either the main loop or a handoff worker thread.
+        """
+        result = {'status': 'ERR', 'grid_enabled': None, 'timeout': None, 'fallback': None}
+        try:
+            resp = self._read_regs(client, self.REG_GRID_CONTROL, 2, slave_id)
+            if self._is_conn_error(resp):
+                result['status'] = 'RST'
+                return result
+            if not resp.isError():
+                regs = resp.registers
+                val = (int(regs[1]) << 16) | int(regs[0])
+                result['grid_enabled'] = val
+
+                wrote_control = False
+                if val == 0:
+                    self._write_regs(
+                        client, self.REG_GRID_CONTROL,
+                        [1 & 0xFFFF, (1 >> 16) & 0xFFFF], slave_id,
+                    )
+                    wrote_control = True
+
+                dyn_resp = self._read_regs(client, self.REG_ENABLE_DYNAMIC, 1, slave_id)
+                if not dyn_resp.isError() and int(dyn_resp.registers[0]) != 1:
+                    self._write_regs(client, self.REG_ENABLE_DYNAMIC, [1], slave_id)
+                    wrote_control = True
+
+                if wrote_control:
+                    self._write_regs(client, self.REG_GRID_CONTROL_COMMIT, [1], slave_id)
+
+            t_resp = self._read_regs(client, self.REG_COMMAND_TIMEOUT, 2, slave_id)
+            f_resp = self._read_regs(client, self.REG_FALLBACK_LIMIT, 2, slave_id)
+            if self._is_conn_error(t_resp) or self._is_conn_error(f_resp):
+                result['status'] = 'RST'
+                return result
+
+            if not t_resp.isError() and not f_resp.isError():
+                t_regs = t_resp.registers
+                curr_t = (int(t_regs[1]) << 16) | int(t_regs[0])
+                f_regs = f_resp.registers
+                f_bytes = int(f_regs[1]).to_bytes(2, 'big') + int(f_regs[0]).to_bytes(2, 'big')
+                curr_f = struct.unpack('>f', f_bytes)[0]
+
+                target_t = int(self.settings[f'TargetTimeoutSlot{slot_index}'])
+                target_f = float(self.settings[f'TargetFallbackPowerSlot{slot_index}'])
+
+                wrote_setpoint = False
+                if curr_t != target_t:
+                    self._write_regs(
+                        client, self.REG_COMMAND_TIMEOUT,
+                        [int(target_t) & 0xFFFF, (int(target_t) >> 16) & 0xFFFF], slave_id,
+                    )
+                    wrote_setpoint = True
+                if curr_f != target_f:
+                    fb = struct.pack('>f', float(target_f))
+                    high_word = int.from_bytes(fb[0:2], 'big')
+                    low_word = int.from_bytes(fb[2:4], 'big')
+                    self._write_regs(client, self.REG_FALLBACK_LIMIT, [low_word, high_word], slave_id)
+                    wrote_setpoint = True
+
+                if wrote_setpoint:
+                    t_verify = self._read_regs(client, self.REG_COMMAND_TIMEOUT, 2, slave_id)
+                    f_verify = self._read_regs(client, self.REG_FALLBACK_LIMIT, 2, slave_id)
+                    if not t_verify.isError() and not f_verify.isError():
+                        curr_t = (int(t_verify.registers[1]) << 16) | int(t_verify.registers[0])
+                        fb = int(f_verify.registers[1]).to_bytes(2, 'big') + int(f_verify.registers[0]).to_bytes(2, 'big')
+                        curr_f = struct.unpack('>f', fb)[0]
+
+                result['timeout'] = curr_t
+                result['fallback'] = curr_f
+                result['status'] = 'OK'
+            else:
+                result['status'] = 'REG ERR'
+        except Exception:
+            result['status'] = 'ERR'
+        return result
+
+    def _find_fronius_service(self):
+        try:
+            matches = glob.glob('/service/*fronius*')
+            if matches:
+                return matches[0]
+        except Exception:
+            pass
+        return self.DBUS_FRONIUS_SERVICE
+
+    def _svc(self, flag, service):
+        try:
+            subprocess.call(['svc', flag, service])
+            return True
+        except Exception as e:
+            logging.error('svc %s %s failed: %s', flag, service, e)
+            return False
+
+    def _wait_session_free(self, ip, slave_id):
+        """After pausing dbus-fronius, wait until the inverter accepts a real
+        transaction (its previous session may linger a few seconds)."""
+        deadline = time.time() + self.SESSION_FREE_TIMEOUT_SECS
+        while time.time() < deadline:
+            client = ModbusTcpClient(ip, port=502, timeout=self.HANDOFF_PROBE_TIMEOUT)
+            try:
+                if client.connect():
+                    resp = self._read_regs(client, self.REG_GRID_CONTROL, 2, slave_id)
+                    if not resp.isError():
+                        return True
+            except Exception:
+                pass
+            finally:
+                try:
+                    client.close()
+                except Exception:
+                    pass
+            time.sleep(1)
+        return False
+
+    def periodic_handoff(self):
+        """GLib timer callback: kick a handoff worker (no-op if nothing to do)."""
+        threading.Thread(target=self.handoff_reassert, daemon=True).start()
+        return True
+
+    def trigger_handoff(self):
+        threading.Thread(target=self.handoff_reassert, daemon=True).start()
+
+    def handoff_reassert(self):
+        """Pause dbus-fronius once, configure all enabled handoff-mode inverters,
+        then always restart dbus-fronius. Runs in a worker thread."""
+        if not HAVE_PYMODBUS:
+            return
+        if not self._handoff_lock.acquire(blocking=False):
+            return  # a handoff is already in progress
+
+        try:
+            targets = []
+            for idx in range(self.MAX_DETECTED_SLOTS):
+                slot = self.detected_slots[idx]
+                serial = slot.get('serial', '')
+                ip = slot.get('ip', '')
+                if not ip:
+                    continue
+                if int(self.settings[f'FallbackSlot{idx+1}Enabled']) != 1:
+                    continue
+                if self.inv_mode.get(serial) != 'handoff':
+                    continue
+                targets.append((idx + 1, ip, int(slot.get('slave', 0) or 0), serial))
+
+            if not targets:
+                return
+
+            GLib.idle_add(self.update_status, 'Handoff: pausing dbus-fronius to reach inverter(s)...')
+            svc_path = self._find_fronius_service()
+            self._handoff_active = True
+            if not self._svc('-d', svc_path):
+                self._handoff_active = False
+                GLib.idle_add(self.update_status, 'Handoff: could not stop dbus-fronius')
+                return
+
+            try:
+                for (slot_index, ip, slave_id, serial) in targets:
+                    if not self._wait_session_free(ip, slave_id):
+                        self.inv_actuals[serial] = dict(self.inv_actuals.get(serial, {}), status='OFF')
+                        continue
+                    client = ModbusTcpClient(ip, port=502, timeout=5)
+                    try:
+                        if client.connect():
+                            res = self._configure_inverter(client, slot_index, slave_id)
+                            self.inv_actuals[serial] = {
+                                'status': res['status'],
+                                'timeout': res.get('timeout'),
+                                'fallback': res.get('fallback'),
+                                'grid': res.get('grid_enabled'),
+                            }
+                        else:
+                            self.inv_actuals[serial] = dict(self.inv_actuals.get(serial, {}), status='OFF')
+                    finally:
+                        try:
+                            client.close()
+                        except Exception:
+                            pass
+            finally:
+                # Critical: always hand the session back, even on error.
+                self._svc('-u', svc_path)
+                self._handoff_active = False
+
+            GLib.idle_add(self._publish_slot_ui)
+            GLib.idle_add(self.update_status, 'Handoff: re-asserted; dbus-fronius resumed')
+        finally:
+            self._handoff_lock.release()
 
     def update(self):
         if self.settings['EnableService'] == 0:
@@ -356,9 +633,10 @@ class SolarEdgeHeartbeat:
             self.dbus['/ActiveDevices'] = 'None'
             return True
 
-        # Throttle refresh so we don't spam DBus.
+        # Throttle refresh so we don't spam DBus. Never start discovery while a
+        # handoff has dbus-fronius paused (its pvinverter services are gone).
         now = time.time()
-        if (now - self._last_dbus_discovery) >= self.DBUS_DISCOVERY_THROTTLE_SECS:
+        if not self._handoff_active and (now - self._last_dbus_discovery) >= self.DBUS_DISCOVERY_THROTTLE_SECS:
             self._last_dbus_discovery = now
             threading.Thread(target=self.discover_solar_edge_from_dbus).start()
 
@@ -370,122 +648,83 @@ class SolarEdgeHeartbeat:
             slot = self.detected_slots[idx]
             if not slot.get('ip'):
                 continue
-            targets.append((slot_index, slot.get('ip'), int(slot.get('slave', 0) or 0)))
+            targets.append((slot_index, slot.get('ip'), int(slot.get('slave', 0) or 0), slot.get('serial', '')))
 
         if not targets:
             self.dbus['/Status'] = 'No enabled SolarEdge inverters'
             self.dbus['/ActiveDevices'] = 'None'
             return True
 
-        # Loop through all enabled targets (per-slot)
-        for idx, (slot_index, ip, slave_id) in enumerate(targets):
-            client = ModbusTcpClient(ip, port=502, timeout=2)
-            if client.connect():
-                try:
-                    resp = self._read_regs(client, self.REG_GRID_CONTROL, 2, slave_id)
-                    if not resp.isError():
-                        # 2x uint16 registers -> uint32, little word order
-                        regs = resp.registers
-                        val = (int(regs[1]) << 16) | int(regs[0])
-                        if idx == 0:
-                            ui_grid_enabled = val  # Display first device's state on UI
+        # Per-slot: maintain in-place when the inverter tolerates a 2nd Modbus
+        # session; otherwise defer to the periodic handoff window.
+        for pos, (slot_index, ip, slave_id, serial) in enumerate(targets):
+            mode = self.inv_mode.get(serial, 'unknown')
 
-                        wrote_control = False
-                        if val == 0:
-                            self._write_regs(
-                                client,
-                                self.REG_GRID_CONTROL,
-                                # uint32(1) -> [low_word, high_word] for little word order
-                                [1 & 0xFFFF, (1 >> 16) & 0xFFFF],
-                                slave_id,
-                            )
-                            wrote_control = True
-
-                        # Ensure dynamic control is enabled (0xF300 == 1)
-                        dyn_resp = self._read_regs(client, self.REG_ENABLE_DYNAMIC, 1, slave_id)
-                        if not dyn_resp.isError():
-                            if int(dyn_resp.registers[0]) != 1:
-                                self._write_regs(client, self.REG_ENABLE_DYNAMIC, [1], slave_id)
-                                wrote_control = True
-
-                        # Commit only when we changed control enable flags
-                        if wrote_control:
-                            self._write_regs(client, self.REG_GRID_CONTROL_COMMIT, [1], slave_id)
-
-                    t_resp = self._read_regs(client, self.REG_COMMAND_TIMEOUT, 2, slave_id)
-                    f_resp = self._read_regs(client, self.REG_FALLBACK_LIMIT, 2, slave_id)
-
-                    if not t_resp.isError() and not f_resp.isError():
-                        # 2x uint16 -> uint32 (little word order)
-                        t_regs = t_resp.registers
-                        curr_t = (int(t_regs[1]) << 16) | int(t_regs[0])
-
-                        # 2x uint16 -> float32 (little word order, with big-endian float bytes)
-                        import struct
-                        f_regs = f_resp.registers
-                        # word_order='little' means the *low* word comes first.
-                        # So swap word order to form standard big-endian float bytes.
-                        f_bytes = int(f_regs[1]).to_bytes(2, 'big') + int(f_regs[0]).to_bytes(2, 'big')
-                        curr_f = struct.unpack('>f', f_bytes)[0]
-
-                        if idx == 0:
-                            ui_actual_t = curr_t
-                            ui_actual_f = curr_f
-
-                        # Publish per-slot actual values for the UI
-                        self.dbus[f'/DetectedInverter{slot_index}/ActualTimeout'] = curr_t
-                        self.dbus[f'/DetectedInverter{slot_index}/ActualFallbackPower'] = curr_f
-
-                        # Slot-specific target values from settings
-                        target_t = int(self.settings[f'TargetTimeoutSlot{slot_index}'])
-                        target_f = float(self.settings[f'TargetFallbackPowerSlot{slot_index}'])
-
-                        wrote_setpoint = False
-                        if curr_t != target_t:
-                            self._write_regs(
-                                client,
-                                self.REG_COMMAND_TIMEOUT,
-                                # uint32 -> [low_word, high_word]
-                                [int(target_t) & 0xFFFF, (int(target_t) >> 16) & 0xFFFF],
-                                slave_id,
-                            )
-                            wrote_setpoint = True
-                        if curr_f != target_f:
-                            import struct
-                            # float32 -> 2x uint16 registers, word_order='little'
-                            f_bytes = struct.pack('>f', float(target_f))
-                            high_word = int.from_bytes(f_bytes[0:2], 'big')
-                            low_word = int.from_bytes(f_bytes[2:4], 'big')
-                            f_regs_out = [low_word, high_word]
-                            self._write_regs(client, self.REG_FALLBACK_LIMIT, f_regs_out, slave_id)
-                            wrote_setpoint = True
-
-                        # Verify by re-reading once after write.
-                        if wrote_setpoint:
-                            t_verify = self._read_regs(client, self.REG_COMMAND_TIMEOUT, 2, slave_id)
-                            f_verify = self._read_regs(client, self.REG_FALLBACK_LIMIT, 2, slave_id)
-                            if not t_verify.isError() and not f_verify.isError():
-                                tv = (int(t_verify.registers[1]) << 16) | int(t_verify.registers[0])
-                                import struct
-                                fb = int(f_verify.registers[1]).to_bytes(2, 'big') + int(f_verify.registers[0]).to_bytes(2, 'big')
-                                fv = struct.unpack('>f', fb)[0]
-                                # Keep UI aligned with verified values for first enabled slot
-                                if idx == 0:
-                                    ui_actual_t = tv
-                                    ui_actual_f = fv
-
-                        status_list.append(f"Slot {slot_index}: {ip} (id {slave_id}): OK t={curr_t}s f={curr_f:.2f}%")
-                    else:
-                        status_list.append(f"Slot {slot_index}: {ip} (id {slave_id}): REG ERR")
-                        overall_status = "Errors Present"
-                except Exception:
-                    status_list.append(f"Slot {slot_index}: {ip} (id {slave_id}): ERR")
+            if mode == 'handoff':
+                a = self.inv_actuals.get(serial, {})
+                st = a.get('status')
+                if st == 'OK':
+                    status_list.append(
+                        f"Slot {slot_index}: {ip} (id {slave_id}): HANDOFF OK "
+                        f"t={int(a.get('timeout') or 0)}s f={float(a.get('fallback') or 0.0):.2f}%"
+                    )
+                    if pos == 0:
+                        ui_grid_enabled = int(a.get('grid') or 0)
+                        ui_actual_t = int(a.get('timeout') or 0)
+                        ui_actual_f = float(a.get('fallback') or 0.0)
+                elif st in (None, ''):
+                    status_list.append(f"Slot {slot_index}: {ip} (id {slave_id}): HANDOFF pending")
+                else:
+                    status_list.append(f"Slot {slot_index}: {ip} (id {slave_id}): HANDOFF {st}")
                     overall_status = "Errors Present"
-                finally:
-                    client.close()
-            else:
+                continue
+
+            # 'unknown' or 'inplace': use our own session.
+            client = ModbusTcpClient(ip, port=502, timeout=2)
+            if not client.connect():
                 status_list.append(f"Slot {slot_index}: {ip} (id {slave_id}): OFF")
                 overall_status = "Offline Devices"
+                continue
+            try:
+                res = self._configure_inverter(client, slot_index, slave_id)
+            finally:
+                client.close()
+
+            if res['status'] == 'RST':
+                # Single Modbus session (e.g. SE30K) owned by dbus-fronius.
+                self.inv_mode[serial] = 'handoff'
+                status_list.append(
+                    f"Slot {slot_index}: {ip} (id {slave_id}): single session, switching to handoff"
+                )
+                self.trigger_handoff()
+                continue
+
+            self.inv_mode[serial] = 'inplace'
+            self.inv_actuals[serial] = {
+                'status': res['status'],
+                'timeout': res.get('timeout'),
+                'fallback': res.get('fallback'),
+                'grid': res.get('grid_enabled'),
+            }
+
+            if res['status'] == 'OK':
+                if pos == 0:
+                    ui_grid_enabled = int(res.get('grid_enabled') or 0)
+                    ui_actual_t = int(res.get('timeout') or 0)
+                    ui_actual_f = float(res.get('fallback') or 0.0)
+                status_list.append(
+                    f"Slot {slot_index}: {ip} (id {slave_id}): OK "
+                    f"t={int(res.get('timeout') or 0)}s f={float(res.get('fallback') or 0.0):.2f}%"
+                )
+            elif res['status'] == 'REG ERR':
+                status_list.append(f"Slot {slot_index}: {ip} (id {slave_id}): REG ERR")
+                overall_status = "Errors Present"
+            else:
+                status_list.append(f"Slot {slot_index}: {ip} (id {slave_id}): ERR")
+                overall_status = "Errors Present"
+
+        # Refresh per-slot Actual* paths from cache (covers handoff slots).
+        self._publish_slot_ui()
 
         # Publish the aggregated data to the UI
         self.dbus['/ActiveDevices'] = " | ".join(status_list)
